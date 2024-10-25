@@ -1,0 +1,178 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+# Define variable for repeated condition
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags:
+    - create
+    - delete
+
+######### Validation ##################
+# Find python path from /hosts file.
+- name: Find python path from /hosts file.
+  shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \'
+  register: python
+  connection: local
+  ignore_errors: true
+  changed_when: false
+  when: is_current_node
+  tags:
+    - always
+
+- set_fact:
+    python_path: "{{python.stdout}}"
+  when: python is succeeded and is_current_node
+  tags:
+    - always
+
+- name: Error Fail to get the python path from /hosts file.
+  fail:
+    msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+  when: python is failed and is_current_node
+  any_errors_fatal: yes
+  tags:
+    - always
+
+- name: Validating FS input information
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/FS_plugin.py 'create' "
+  connection: local
+  ignore_errors: true
+  when: is_current_node
+  register: output
+  changed_when: false
+  tags:
+    - create
+
+- name: Validating FS input information
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/FS_plugin.py 'delete' "
+  connection: local
+  ignore_errors: true
+  when: is_current_node
+  register: output
+  changed_when: false
+  tags:
+    - delete
+
+- name: External Var File input's validated successfully.
+  debug:
+    msg: "Input information validated successfully."
+  when: is_current_node and (output.rc == 0)
+  tags:
+    - create
+    - delete
+
+- name: Failed to validate the External Var File Inputs.
+  fail:
+    msg: "{{output.stdout}}"
+  when: is_current_node and (output.rc != 0)
+  any_errors_fatal: true
+  tags:
+    - create
+    - delete
+######################################
+
+# Check if cluster exists
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+  when: is_current_node
+  ignore_errors: true
+  register: cluster_exists
+  changed_when: false
+  tags:
+    - create
+    - delete
+
+# Display messages for cluster existence
+- name: Display message if cluster exists
+  debug:
+    msg: "Cluster already exists."
+  when: cluster_exists is succeeded and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist."
+  any_errors_fatal: true
+  when: cluster_exists is failed and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Check FS data.
+  include_tasks: main2.yml
+  loop: "{{ FS }}"
+  when: cluster_exists is succeeded
+  tags:
+    - create
+    - delete
+
+# Verify and Sync (Create)
+- name: Verify and Sync (Create)
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15        # Polling Interval in Seconds
+  register: cluster_sync_create
+  when: 
+    - is_current_node
+    - fs_create is succeeded
+  tags:
+    - create
+
+# Handle cluster sync results (Create)
+- name: cluster sync failed (Create)
+  fail:
+    msg: "{{ cluster_sync_create.stderr }}"
+  any_errors_fatal: true
+  when: 
+    - is_current_node
+    - cluster_sync_create is failed
+
+- name: Cluster sync passed (Create)
+  debug:
+    msg: "Cluster synced successfully."
+  when: 
+    - is_current_node
+    - cluster_sync_create is succeeded
+
+# Verify and Sync (Delete)
+- name: Verify and Sync (Delete)
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15        # Polling Interval in Seconds
+  register: cluster_sync_delete
+  when: 
+    - is_current_node
+    - fs_delete is succeeded
+  tags:
+    - delete
+
+# Handle cluster sync results (Delete)
+- name: cluster sync failed (Delete)
+  fail:
+    msg: "{{ cluster_sync_delete.stderr }}"
+  any_errors_fatal: true
+  when: 
+    - is_current_node
+    - cluster_sync_delete is failed
+  tags:
+    - delete
+
+- name: Cluster sync passed (Delete)
+  debug:
+    msg: "Cluster synced successfully."
+  when: 
+    - is_current_node
+    - cluster_sync_delete is succeeded
+  tags:
+    - delete

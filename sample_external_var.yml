@@ -1,0 +1,232 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+###########################
+# NODE Details & NODES are mandatory fields for running all the playbooks
+# Make sure IP in node details are same as those in /hosts file
+###########################
+
+NODES: hostname1,hostname2,...,hostnameN
+NODE_DETAILS:
+- full_name: hostname1.phalab
+  ip: IP1
+  name: hostname1
+- full_name: hostnameN.phalab
+  ip: IPN
+  name: hostnameN
+
+##############################
+# Cluster Types are below:
+    # Standard
+    # Stretched
+    # Linked
+##############################
+Cluster_Type: Linked
+
+# Use for NSC or Standard based cluster
+REPOSITORIES: PVID
+
+# Use this section in case of Linked/Stretched cluster
+SITE1_NODES: hostname1,hostname2
+SITE2_NODES: hostname4,hostname3
+
+# Use this section in case of Linked cluster
+SITE1_REPOSITORIES: PVID_SITE1
+SITE2_REPOSITORIES: PVID_SITE2
+
+
+## PowerHA Absolute Build Path datils
+POWERHA_BLD_PATH: '<Absolute path of the PowerHA build>'
+
+######################################################
+# Required data for RG creation
+# startup policy: OHN    (Online On Home Node Only)
+#                 OFAN   (Online On First Available Node)
+#                 OAAN   (Online On All Available Nodes)
+#                 OUDP   (Online Using Node Distribution Policy)
+
+# fallover policy: FNPN   (Fallover To Next Priority Node In The List)
+#                  FUDNP  (Fallover Using Dynamic Node Priority)
+#                  BO     (Bring Offline (On Error Node Only))
+
+# fallback policy: NFB    (Never Fallback)
+#                  FBHPN  (Fallback To Higher Priority Node In The List)
+
+# site policy: 	   ignore
+#                  primary
+#                  either
+#                  both
+
+# It is important to enter SITE1_NODES and SITE2_NODES in section above for SITE based clusters
+# Leave SITE_POLICY blank in case of Standard cluster
+######################################################
+
+RGNAMES:
+  - { name: 'RG1', STARTUP: 'OAAN', FALLOVER: 'BO', FALLBACK: 'NFB', SITE_POLICY: 'both'}
+
+
+################################
+# Required data for VG Creation.
+################################
+
+VG:
+  - { NAME: 'VG1', NODES: 'hostname1,hostname2,..,hostnameN', PHYSICAL_VOLUMES: 'PVID', TYPE: 'original'}
+
+################################
+# Required data to add VG's to RG.
+################################
+
+VG_RG:
+  - { VG_NAMES: 'VG1,VG2', RG_NAME: 'RG1'}
+  - { VG_NAMES: 'VG3', RG_NAME: 'RG2'}
+
+################################
+# Required data to add Service_ip's to RG.
+################################
+
+SERVICE_IP_RG:
+  - { SERVICE_IP_NAMES: 'service_ip1,service_ip2', RG_NAME: 'RG1'}
+
+
+################################
+# Required data for FS Creation
+# Make sure that VG is already created
+# Do not use "/" in fs name. It is added by default
+################################
+
+FS:
+  - { NAME: 'fs1', TYPE: 'enhanced', VOLUME_GROUP: 'VG1', UNITS: '120', SIZE_PER_UNIT: 'megabytes', BLOCK_SIZE: '4096'}
+
+
+################################
+# Required data for SERVICE IP Creation
+# Playbook will automatically add entry to /etc/hosts
+################################
+# Required data for Service IP
+# site policy :    ignore
+#                  site1
+#                  site2
+# Please use site policy as 'ignore' for standard cluster. For Site based cluster mention as per your requirement.
+
+SERVICE_IP:
+  - { NAME: '<service ip name>', IP: 'sample_IP', NETWORK: 'net_ether_01', SITE: 'ignore'} 
+
+################################
+# Required data for APPLICATION CONTROLLER & MONITOR Creation
+# Make sure applications are already added at the given path. Playbook does not automatically adds the scripts
+# Both application controller and monitor data for required for application playbook
+################################
+
+# Application controller information
+ApplicationController:
+   - { NAME: 'APP1', PATH: '/path/to/scripts', STARTSCRIPT: 'start1', STOPSCRIPT: 'stop1'}
+
+# Application monitor information
+ApplicationMonitor:
+  - { NAME: 'APP_MON1', PATH: '/path/to/scripts', APPLICATIONS: 'APP1', MONITORMETHOD: 'mon1', FAILUREACTION: 'notify', TYPE: 'Custom'}
+
+
+################################
+# Required data for NETWORK Creation
+# The Network name should match with the type
+################################
+
+# Network creation information
+NETWORK:
+  - { NAME: 'net_ether_01', TYPE: 'ether'}
+
+
+################################
+# Required data for INTERFACE Creation
+# The INTERFACE should match with the name
+# Make sure that the interfaces are up in AIX before adding to PHA
+# Make sure that the network is already created
+# Enteries are automatically added to /etc/hosts
+################################
+
+INTERFACES:
+  - { NAME: 'en1_hostname1', NETWORK: 'net_ether_01', NODE: 'hostname1', INTERFACE: 'en1', IP: 'IP1'}
+  - { NAME: 'en1_hostname2', NETWORK: 'net_ether_01', NODE: 'hostname2', INTERFACE: 'en1', IP: 'IP2'}
+
+
+################################
+# Required data for PERSISTENT_IP Creation
+# The PERSISTENT_IP should match with the name
+# Make sure that the PERSISTENT_IP interfaces are up in AIX before adding to PHA.
+# Make sure that the network is already created
+# Enteries are automatically added to /etc/hosts
+################################
+
+PERSISTENT_IP:
+  - { NAME: 'persistent_ip1', NETWORK: 'net_XD_data_01', NODE: 'hostname1', IP: 'IP1'}
+  - { NAME: 'persistent_ip2', NETWORK: 'net_XD_data_01', NODE: 'hostname1', IP: 'IP2'}
+
+
+################################
+# Required data for RG MOVE Creation
+################################
+
+##Required data for RG Move
+RGMOVE:
+  - { RG_NAME: 'RG1', FROM: 'hostname1', TO: 'hostname2'}
+
+
+################################
+# Required data for NFSv2v3 Creation
+# Make sure that SERVICE IP, VG, NETWORK AND FS are already present
+# RG is created in automatically in the playbook
+# Make sure "/" is used for fs name
+# Make sure that mount points are free
+# Make sure "/" is used for Mount Point and it is an absolute path
+################################
+
+##Required data for NFSv2v3
+
+NFSv2v3:
+  - { RG_NAME: 'RG1', NFS_SERVICE_IP: 'Service_ip1', VG_NAME: 'VG1', MOUNT_POINT: '/test_mount', NETWORK: 'net_ether_01', FILE_SYSTEM: '/fs1' }
+ 
+
+################################
+# Required data for NFSv4 Creation
+# Make sure that SERVICE IP, VG, NETWORK AND FS are already present
+# RG is created in automatically in the playbook
+# Make sure "/" is used for fs name
+# Make sure "/" is used for Mount Point and it is an absolute path
+# make sure that PRIMARY_NODES is having only the home node value 
+# Storage system path is automatically created in NFSV4
+# Make sure that mount points are free
+################################
+
+##Required data for NFSv4
+NFSv4:
+  - { RG_NAME: 'RG1', NFS_SERVICE_IP: 'Service_ip1', VG_NAME: 'VG1', MOUNT_POINT: '/test_mount', NETWORK: 'net_ether_01', FILE_SYSTEM: '/fs1', PRIMARY_NODES: 'homenode_hostname', SECONDARY_NODES: 'hostname2,hostname3' }
+
+
+################################
+# Required data for WPAR Creation
+# Make sure that RG, SERVICE IP, VG, FS and APP are already present
+# make sure that application are present at the given path
+# Make sure "/" is used for fs name
+################################
+
+##Required data for WPAR
+WPAR:
+   - { RG_NAME: 'RG1', WPAR_SERVICE_IP: 'Service_ip1', APP_SCRIPTS_PATH: '/path/to/scripts', APP_NAME: 'APP1', VG_NAME: 'VG1', FS_NAME: '/fs1'}
+
+
+
+###########################################################################################################
+
+###########################################################################################################
+# Required data for GLVM SYNC Creation
+
+GLVM:
+  - { GLVM_name: 'sync_test', type: 'sync', Site1_Disk: '<PVID of site1 shared disk>', Site2_Disk: '<PVID of site2 shared disk>'}
+
+###########################################################################################################

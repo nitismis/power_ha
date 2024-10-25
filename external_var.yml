@@ -1,0 +1,221 @@
+###########################
+# Please take reference from sample external var file in / directory
+# NODE Details & NODES are mandatory fields for running all the playbooks
+# Make sure IP in node details are same as those in /hosts file
+# The number of values in NODE_DETAILS and NODES should match
+###########################
+
+NODES: <hostname1>,<hostname2>,...,<hostname3>
+NODE_DETAILS:
+- full_name: <NODE1 FQDN>
+  ip: <NODE1 IP>
+  name: <hostname1>
+- full_name: <NODEN FQDN>
+  ip: <NODEN IP>
+  name: <hostnameN>
+
+##############################
+# Cluster Types are below:
+    # Standard
+    # Stretched
+    # Linked
+##############################
+Cluster_Type: <Type of cluster>
+
+# Use for Standard or Stretched based cluster
+REPOSITORIES: <REPOSITORY DISK PVID>
+
+# Use this section in case of Linked/Stretched cluster
+SITE1_NODES: <NODE1>,<NODE2>
+SITE2_NODES: <NODE3>,<NODE4>
+
+# Use this section in case of Linked cluster
+SITE1_REPOSITORIES: <SITE1 REPOSITORY DISK PVID>
+SITE2_REPOSITORIES: <SITE2 REPOSITORY DISK PVID>
+
+
+## PowerHA Absolute Build Path datils
+POWERHA_BLD_PATH: '<Absolute path of the PowerHA build>'
+
+######################################################
+# Required data for RG creation
+# startup policy: OHN    (Online On Home Node Only)
+#                 OFAN   (Online On First Available Node)
+#                 OAAN   (Online On All Available Nodes)
+#                 OUDP   (Online Using Node Distribution Policy)
+
+# fallover policy: FNPN   (Fallover To Next Priority Node In The List)
+#                  FUDNP  (Fallover Using Dynamic Node Priority)
+#                  BO     (Bring Offline (On Error Node Only))
+
+# fallback policy: NFB    (Never Fallback)
+#                  FBHPN  (Fallback To Higher Priority Node In The List)
+
+# site policy: 	   ignore
+#                  primary
+#                  either
+#                  both
+
+# It is important to enter SITE1_NODES and SITE2_NODES in section above for SITE based clusters
+# Leave SITE_POLICY blank in case of Standard cluster
+######################################################
+
+RGNAMES:
+  - { name: '<rg name>', STARTUP: '<startup policy>', FALLOVER: '<fallover policy>', FALLBACK: '<fallback policy>', SITE_POLICY: '<site policy>'}
+
+################################
+# Required data for VG Creation.
+################################
+
+VG:
+  - { NAME: '<vgname>', NODES: '<node1>,<node2>', PHYSICAL_VOLUMES: '<pvid of shared disk>', TYPE: '<original/big/scalable/legacy>'}
+
+################################
+# Required data for FS Creation
+# Make sure that VG is already created
+# Do not use "/" in fs name. It is added by default
+################################
+
+FS:
+  - { NAME: '<fsname>', TYPE: '<enhanced/standard/compressed/large>', VOLUME_GROUP: '<vgname>', UNITS: '<number of units>', SIZE_PER_UNIT: '<megabytes/gigabytes>', BLOCK_SIZE: '< 4096/512/1024/2048 >'}
+
+
+################################
+# Required data for SERVICE IP Creation
+# Playbook will automatically add entry to /etc/hosts
+################################
+# Required data for Service IP
+# site policy :    ignore
+#                  site1
+#                  site2
+# Please use site policy as 'ignore' for standard cluster. For Site based cluster mention as per your requirement.
+
+SERVICE_IP:
+  - { NAME: '<service ip name>', IP: '<ip address>', NETWORK: '<network name>', SITE: '<site policy>'} 
+
+
+################################
+# Required data for APPLICATION CONTROLLER & MONITOR Creation
+# Make sure applications are already added at the given path. Playbook does not automatically adds the scripts
+# Both application controllers and monitors fields are required to run the playbook
+################################
+
+# Application controller information
+ApplicationController:
+   - { NAME: '<app name>', PATH: '<script path>', STARTSCRIPT: '<start_script>', STOPSCRIPT: '<stop_script>'}
+
+# Application monitor information
+ApplicationMonitor:
+  - { NAME: '<monitor name>', PATH: '</script path>', APPLICATIONS: '<app name>', MONITORMETHOD: '<script>', FAILUREACTION: '<notify/fallover>', TYPE: '<Custom/Process>'}
+
+
+################################
+# Required data for NETWORK Creation
+# The Network name should match with the type
+################################
+
+# Network creation information
+NETWORK:
+  - { NAME: '<network name>', TYPE: '<ether|XD_data|XD_ip>'}
+
+
+################################
+# Required data for INTERFACE Creation
+# The INTERFACE should match with the name
+# Make sure that the interfaces are up in AIX before adding to PHA
+# Make sure that the network is already created
+# Enteries are automatically added to /etc/hosts
+################################
+
+INTERFACES:
+  - { NAME: '<interface_name>_<node1_name>', NETWORK: '<network name>', NODE: '<node1 name>', INTERFACE: '<interface>', IP: '<ip address>'}
+  - { NAME: '<interface_name>_<node2_name>', NETWORK: '<network name>', NODE: '<node2 name>', INTERFACE: '<interface>', IP: '<ip address>'}
+
+
+################################
+# Required data for PERSISTENT_IP Creation
+# The PERSISTENT_IP should match with the name
+# Make sure that the PERSISTENT_IP interfaces are up in AIX before adding to PHA.
+# Make sure that the network is already created
+# Enteries are automatically added to /etc/hosts
+################################
+
+PERSISTENT_IP:
+  - { NAME: '<persistent_ip_name>', NETWORK: '<network name>', NODE: '<node1 name>', IP: '<ip address>'}
+  - { NAME: '<persistent_ip_name>', NETWORK: '<network name>', NODE: '<node2 name>', IP: '<ip address>'}
+
+################################
+# Required data for RG MOVE Creation
+################################
+
+##Required data for RG Move
+RGMOVE:
+  - { RG_NAME: '<rg name>', FROM: '<NODE1>', TO: '<NODE2>'}
+
+################################
+# Required data to add VG's to RG.
+################################
+
+VG_RG:
+  - { VG_NAMES: '<vgnames>', RG_NAME: '<rg name>'}
+
+# Required data to add Service_IP's to RG.
+################################
+
+SERVICE_IP_RG:
+  - { SERVICE_IP_NAMES: '<Service_ip_names>', RG_NAME: '<rg name>'}
+
+################################
+# Required data for NFSv2v3 Creation
+# Make sure that SERVICE IP, VG, NETWORK AND FS are already present
+# RG is created in automatically in the playbook
+# Make sure "/" is used for fs name
+# Make sure that mount points are free
+# Make sure "/" is used for Mount Point and it is an absolute path
+################################
+
+##Required data for NFSv2v3
+
+NFSv2v3:
+  - { RG_NAME: '<rg name>', NFS_SERVICE_IP: '<service ip name>', VG_NAME: '<vgname>', MOUNT_POINT: '</mount point>', NETWORK: '<network name>', FILE_SYSTEM: '<fsname>' }
+ 
+
+################################
+# Required data for NFSv4 Creation
+# Make sure that SERVICE IP, VG, NETWORK AND FS are already present
+# RG is created in automatically in the playbook
+# Make sure "/" is used for fs name
+# Make sure "/" is used for Mount Point and it is an absolute path
+# make sure that PRIMARY_NODES is having only the home node value 
+# Storage system path is automatically created in NFSV4
+# Make sure that mount points are free
+################################
+
+##Required data for NFSv4
+NFSv4:
+  - { RG_NAME: '<rg name>', NFS_SERVICE_IP: '<service ip name>', VG_NAME: '<vgname>', MOUNT_POINT: '</mount point>', NETWORK: '<network name>', FILE_SYSTEM: '<fsname>', PRIMARY_NODES: '<home node>', SECONDARY_NODES: '<node2>,<node3>' }
+
+
+################################
+# Required data for WPAR Creation
+# Make sure that RG, SERVICE IP, VG, FS and APP are already present
+# make sure that application are present at the given path
+# Make sure "/" is used for fs name
+################################
+
+##Required data for WPAR
+WPAR:
+   - { RG_NAME: '<rg name>', WPAR_SERVICE_IP: '<service ip name>', APP_SCRIPTS_PATH: '<path_of_the_script>', APP_NAME: '<APP name>', VG_NAME: '<VG name>', FS_NAME: '</FS name>'}
+
+
+
+###########################################################################################################
+
+
+###########################################################################################################
+# Required data for GLVM SYNC Creation
+
+GLVM:
+  - { GLVM_name: '<name>', type: 'sync', Site1_Disk: '<PVID of site1 shared disk>', Site2_Disk: '<PVID of site2 shared disk>'}
+
+###########################################################################################################

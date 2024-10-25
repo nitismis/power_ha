@@ -1,0 +1,24 @@
+---
+- hosts: powerha_remote_servers
+  become: yes
+  vars_files:
+   - /etc/ansible/external_var.yml
+
+  vars: 
+   - MAP_HOSTS_NAMES: []
+
+  vars_prompt:
+    - name: ip
+      prompt: "\nPlease enter the node IP addresses (ex: IP1,IP2,...,IPN): \n"
+      private: no
+
+    - name: full_name
+      prompt: "\nPlease enter the FULL names of the nodes (ex: hostname1.phalab.local,...,hostnameN.phalab.local):  \n"
+      private: no
+
+    - name: name
+      prompt: "\nPlease enter the FULL names of the nodes (ex: hostname1,...,hostnameN):  \n"
+      private: no
+
+  roles:
+    - map_hosts

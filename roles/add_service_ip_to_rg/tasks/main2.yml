@@ -1,0 +1,74 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# Check if RG exists
+- name: Check if RG exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}}"
+  register: check_rg
+  ignore_errors: true
+  when: is_current_node
+  changed_when: false
+
+- name: Error message if RG doesn't exist
+  debug:
+    msg: "RG {{item.RG_NAME}} doesn't exist. Hence skipping the service ip adding to RG."
+  when:
+    - check_rg is failed
+    - is_current_node
+
+- name: Check if ServiceIP Exists.
+  shell: "CLMGR_TIMEOUT=120 /usr/es/sbin/cluster/utilities/clmgr query serviceIP {{item.SERVICE_IP_NAMES}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_service_ip
+  changed_when: false
+
+- name: Error message if Service_IP does not exists.
+  debug:
+    msg: "Service_IP {{item.SERVICE_IP_NAMES}} doesn't exist. Hence skipping the service ip adding to RG."
+  when: check_service_ip is failed and is_current_node
+
+- block:
+  # Display messages for Service_IP existence
+  - name: Display message if Service_IP exists
+    debug:
+      msg: "As expected Service_IP {{item.SERVICE_IP_NAMES}} exists."
+    when:
+      - check_service_ip is succeeded
+      - is_current_node
+
+  - name: Display message if RG exists
+    debug:
+      msg: "As Expected RG {{item.RG_NAME}} exist."
+    when:
+      - is_current_node
+      - check_rg is succeeded
+
+  # ADD Service_IP to Resource Group
+  - name: ADD Service_IP to Resource Group
+    shell: "/usr/es/sbin/cluster/utilities/clmgr modify resource_group  {{item.RG_NAME}} SERVICE_LABEL={{item.SERVICE_IP_NAMES}} "
+    when: is_current_node
+    ignore_errors: true
+    register: add_service_ip_rg
+
+  - name: Display message Service_IP add to RG
+    debug:
+      msg: "Service_IP {{item.SERVICE_IP_NAMES}} added to RG {{item.RG_NAME}} Successfully."
+    when: add_service_ip_rg is succeeded and is_current_node
+
+  - name: Error message Service_IP add to RG
+    fail:
+      msg: "Unable to add Service_IP {{item.SERVICE_IP_NAMES}} to RG {{item.RG_NAME}}."
+    any_errors_fatal: true
+    when: add_service_ip_rg is failed and is_current_node
+
+  when:
+    - is_current_node
+    - check_service_ip is succeeded
+    - check_rg is succeeded

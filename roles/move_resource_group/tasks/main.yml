@@ -1,0 +1,146 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+# tasks file for move_rg
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+
+######### Gathering the User Input values ##################
+# Find python path from /hosts file.
+- name: Find python path from /hosts file.
+  shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \'
+  register: python
+  connection: local
+  ignore_errors: true
+  changed_when: false
+  when: is_current_node
+
+- set_fact:
+    python_path: "{{python.stdout}}"
+  when: python is succeeded and is_current_node
+
+- name: Error Fail to get the python path from /hosts file.
+  fail:
+    msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+  when: python is failed and is_current_node
+  any_errors_fatal: yes
+
+- name: Validating input information
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/RGMOVE_plugin.py 'create' "
+  #delegate_to: 127.0.0.1
+  connection: local
+  ignore_errors: true
+  register: output
+  when: is_current_node
+  changed_when: false
+
+- name: External Var File Validation Success.
+  debug:
+    msg: "Input information validated successfully."
+  when: is_current_node and (output.rc == 0)
+
+- name: Failed to validate the External Var File
+  fail:
+    msg: "User INPUT verification failed.{{output.stdout}}"
+  any_errors_fatal: yes
+  when: is_current_node and (output.rc != 0)
+
+#########################################################
+# External Var File Inputs checking ##
+- name: Check if RGMOVE value is not blank
+  fail:
+    msg: "RGMOVE valuse is blank in external var file."
+  when: RGMOVE is not defined or not RGMOVE and is_current_node
+  any_errors_fatal: yes
+
+- name: Check if RGNAME value is not blank
+  fail:
+    msg: "RGNAME valuse is blank in external var file."
+  when: item.RG_NAME is not defined or not item.RG_NAME and is_current_node
+  any_errors_fatal: yes
+  with_items:
+    - "{{ RGMOVE }}"
+
+- name: Check if FROM value is not blank
+  fail:
+    msg: "FROM value is blank in external var file."
+  when: item.FROM is not defined or not item.FROM and is_current_node
+  with_items:
+    - "{{ RGMOVE }}"
+  any_errors_fatal: yes
+
+- name: Check if TO value is not blank
+  fail:
+    msg: "TO value is blank in external var file."
+  when: item.TO is not defined or not item.TO and is_current_node
+  with_items:
+    - "{{ RGMOVE }}"
+  any_errors_fatal: yes
+
+- name: Check if RG move from node value and to node value should not be the same.
+  fail:
+    msg: " RG move from node {{item.FROM}} and to {{item.TO}} node values mentioned as same in external var file."
+  when: is_current_node and (item.FROM == item.TO)
+  with_items:
+    - "{{ RGMOVE }}"
+  any_errors_fatal: yes
+
+- name: Display message External Var File verification Completed.
+  debug:
+    msg: "External Var File verification Completed."
+  when: is_current_node
+
+# Check if cluster exists
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+  ignore_errors: true
+  register: cluster_exists
+  changed_when: false
+
+# Display messages for cluster existence
+- name: Display message if cluster exists
+  debug:
+    msg: "Cluster already exists."
+  when: cluster_exists is succeeded
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist."
+  when: cluster_exists is failed
+  any_errors_fatal: yes
+
+- name: Run lssrc command and grep for state
+  shell: "lssrc -ls clstrmgrES | grep state | awk -F ': ' '{print $2}'"
+  register: cluster_state_output_initial
+  when: cluster_exists is succeeded
+  changed_when: false
+
+- name: Display the Cluster State
+  when: cluster_exists is succeeded and cluster_state_output_initial is succeeded
+  debug:
+    var: cluster_state_output_initial.stdout_lines
+
+- name: Display If Cluster State is stable.
+  when: "cluster_state_output_initial is succeeded and 'ST_STABLE' in cluster_state_output_initial.stdout_lines and cluster_exists is succeeded"
+  debug:
+    msg: "Cluster state is stable on {{ansible_hostname}} Node."
+
+- name: Cluster is not stable --Error
+  fail:
+    msg: "Cluster state is not stable on {{ansible_hostname}} and the state is {{cluster_state_output_initial.stdout_lines}}. Please start the cluster services properly"
+  when: "cluster_state_output_initial is succeeded and 'ST_STABLE' not in cluster_state_output_initial.stdout_lines"
+  any_errors_fatal: yes
+
+- name: Check RG details.
+  include_tasks: main2.yml
+  loop: "{{ RGMOVE }}"
+  when: cluster_exists is succeeded and cluster_state_output_initial is succeeded
+...

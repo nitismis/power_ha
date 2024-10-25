@@ -1,0 +1,435 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+- name: Check if NFS RG exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}}"
+  when: is_current_node
+  register: check_nfs_rg
+  ignore_errors: true
+  tags:
+    - create
+    - delete
+ 
+# Display messages for RG existence
+- name: Display message if RG exists
+  fail:
+    msg: "RG {{item.RG_NAME}} already exists. Please remove {{item.RG_NAME}} entry from /external_var.yml"
+  any_errors_fatal: true
+  when: check_nfs_rg is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message if RG doesn't exist
+  debug:
+    msg: "RG {{item.RG_NAME}} for NFS doesn't exist."
+  when: check_nfs_rg is failed and is_current_node
+  tags:
+    - create
+
+# Display messages for RG existence
+- name: Display message if RG exists
+  debug:
+    msg: "RG {{item.RG_NAME}} already exists. Attempting to remove NFS from RG."
+  when: check_nfs_rg is succeeded and is_current_node
+  tags:
+    - delete
+
+- name: Display message if RG doesn't exist
+  fail:
+    msg: "RG {{item.RG_NAME}} for NFS doesn't exist. Please remove {{item.RG_NAME}} entry from /external_var.yml"
+  any_errors_fatal: true
+  when: check_nfs_rg is failed and is_current_node
+  tags:
+    - delete
+
+- name: Check if NFS service IP exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query service_ip {{item.NFS_SERVICE_IP}}"
+  when: is_current_node
+  register: check_NFS_service
+  ignore_errors: true
+  tags: create
+
+# Display messages for NFS service IP
+- name: Display message if NFS service IP exists
+  debug:
+    msg: "NFS {{item.NFS_SERVICE_IP}} service IP already exists."
+  when: check_NFS_service is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message if NFS service IP doesn't exist
+  fail:
+    msg: "NFS {{item.NFS_SERVICE_IP}} service IP doesn't exist. Plese add the service IP using playbook or manually."
+  when: check_NFS_service is failed and is_current_node
+  any_errors_fatal: true
+  tags:
+    - create
+
+- name: Check if NFS VG exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volumne_group {{item.VG_NAME}}"
+  when: is_current_node
+  register: check_NFS_VG
+  ignore_errors: true
+  tags: create
+
+# Display messages for NFS VG
+- name: Display message if NFS VG exists
+  debug:
+    msg: "NFS VG {{item.VG_NAME}} already exists."
+  when: check_NFS_VG is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message if NFS VG doesn't exist
+  fail:
+    msg: "NFS VG {{item.VG_NAME}} doesn't exist. Plese add the VG using playbook or manually."
+  any_errors_fatal: true
+  when: check_NFS_VG is failed and is_current_node
+  tags:
+    - create
+
+- name: Check if NFS File System exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query file_system {{item.FILE_SYSTEM}}"
+  when: is_current_node
+  register: check_NFS_FS
+  ignore_errors: true
+  tags: create
+
+# Display messages for NFS FS
+- name: Display message if NFS FS exists
+  debug:
+    msg: "NFS FS {{item.FILE_SYSTEM}} already exists."
+  when: check_NFS_FS is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message if NFS FS doesn't exist
+  fail:
+    msg: "NFS FS {{item.FILE_SYSTEM}} doesn't exist. Plese add the FS using playbook or manually."
+  any_errors_fatal: true
+  when: check_NFS_FS is failed and is_current_node
+  tags:
+    - create
+
+- name: Check NFS mount point
+  shell: "cd {{item.MOUNT_POINT}}"
+  register: mount_check
+  ignore_errors: true
+  tags: create 
+
+- name: Display message if Mount point is available
+  debug:
+    msg: "NFS Mount point is available."
+  when: mount_check is succeeded
+  tags:
+    - create
+
+- name: Display message if Mount point is not available
+  debug:
+    msg: "NFS Mount point is not available. Creating it."
+  when: mount_check is failed
+  tags:
+    - create
+
+- name: Create NFS mount point 
+  shell: " mkdir {{item.MOUNT_POINT}}"
+  register: create_mount
+  when: mount_check is failed
+  tags: create
+
+- name: Check NFS mount point
+  shell: "cd {{item.MOUNT_POINT}}"
+  register: mount_check
+  ignore_errors: true
+  when: mount_check is failed and create_mount is succeeded
+  tags: create 
+
+- name: Display message if Mount point is not avaiable
+  fail:
+    msg: "NFS Mount point {{item.MOUNT_POINT}} is not available even after creating."
+  when: mount_check is failed
+  any_errors_fatal: true
+  tags:
+    - create
+
+- name: Display message if Mount point is avaiable
+  debug:
+    msg: "NFS Mount point created successfully."
+  when: mount_check is succeeded
+  tags:
+    - create
+
+- name: Check NFS mount point
+  shell: "cd {{item.MOUNT_POINT}}"
+  register: mount_check
+  ignore_errors: true
+  tags: delete
+
+- name: Display message if Mount point is available
+  debug:
+    msg: "NFS Mount point is available. Removing it"
+  when: mount_check is succeeded
+  tags:
+    - delete
+
+- name: Display message if Mount point is not available
+  debug:
+    msg: "NFS Mount point is not available."
+  when: mount_check is failed
+  tags:
+    - delete
+
+- name: Remove NFS mount point
+  file:
+    path: /test_nfs
+    state: absent
+    force: true  
+  register: delete_mount
+  ignore_errors: true
+  when: mount_check is succeeded 
+  tags: delete 
+
+- name: check NFS Domain
+  shell: "/usr/sbin/chnfsdom"
+  register: nfsdom
+  tags: create
+  
+- name: Add NFS Domain
+  shell: "/usr/sbin/chnfsdom nfsdom"
+  when: nfsdom is failed
+  tags: create
+    
+- name: Remove already existing RG mentioned
+  shell: "/usr/es/sbin/cluster/utilities/clmgr remove resource_group {{item.RG_NAME}}"
+  when: check_nfs_rg is succeeded and is_current_node
+  register: remove_nfs_rg
+  ignore_errors: true
+  tags:
+    - delete
+    
+- name: Display message for RG deletion
+  debug:
+    msg: "Removed NFSv4 RG {{item.RG_NAME}} from cluster."
+  when: check_nfs_rg is succeeded and is_current_node and remove_nfs_rg is succeeded
+  tags:
+    - delete
+
+- name: Display message for RG deletion
+  fail:
+    msg: "{{ remove_nfs_rg.results | map(attribute='stderr') | list | join('\n') }}."
+  any_errors_fatal: true
+  when: check_nfs_rg is succeeded and is_current_node and remove_nfs_rg is failed
+  tags:
+    - delete
+
+- name: ADD NFSv4 RG
+  shell: "/usr/es/sbin/cluster/sa/nfs/sbin/clca_nfsutil addrg -R'{{item.RG_NAME}}' -P'{{item.PRIMARY_NODES}}' -T'{{item.SECONDARY_NODES}}' -I'{{item.NFS_SERVICE_IP}}' -V'{{item.VG_NAME}}' -n'none' -N'{{item.FILE_SYSTEM}}' -C'{{item.MOUNT_POINT}};{{item.FILE_SYSTEM}}' -S'AUTO_SELECT'"
+  when: is_current_node
+  register: Add_NFS
+  ignore_errors: true
+  tags: create
+
+- name: Display message for RG addition
+  debug:
+    msg: "Added NFSv4 RG {{ item.RG_NAME }}."
+  when: Add_NFS is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message for RG addition
+  fail:
+    msg: "{{ Add_NFS.stderr }}"
+  when: Add_NFS is failed and is_current_node
+  any_errors_fatal: true
+  tags:
+    - create
+
+- name: message
+  debug:
+    msg: "Performing verify and sync. Please wait for sometime.."
+  when: is_current_node
+  tags:
+    - create
+
+# Verify and Sync (Create)
+- name: Verify and Sync (Create)
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15        # Polling Interval in Seconds
+  register: cluster_sync_create
+  ignore_errors: true
+  when: is_current_node
+  tags:
+    - create
+
+# Handle cluster sync results (Create)
+- name: cluster sync failed (Create)
+  fail:
+    msg: "{{ cluster_sync_create.stderr }}"
+  any_errors_fatal: true
+  when: cluster_sync_create is failed and is_current_node
+  tags:
+    - create
+
+- name: Cluster sync passed (Create)
+  debug:
+    msg: "Cluster synced successfully."
+  when: cluster_sync_create is succeeded and is_current_node
+  tags:
+    - create
+
+# Verify and Sync (Delete)
+- name: Verify and Sync (Delete)
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15        # Polling Interval in Seconds
+  register: cluster_sync_delete
+  ignore_errors: true
+  when: is_current_node
+  tags:
+    - delete
+
+# Handle cluster sync results (Delete)
+- name: cluster sync failed (Delete)
+  fail:
+    msg: "{{ cluster_sync_create.stderr }}"
+  any_errors_fatal: fatal
+  when: is_current_node and cluster_sync_delete is failed
+  tags:
+    - delete
+
+- name: Cluster sync passed (Delete)
+  debug:
+    msg: "Cluster synced successfully."
+  when: is_current_node and cluster_sync_delete is succeeded
+  tags:
+    - delete
+
+- name: Start cluster services 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr start cluster"
+  when: is_current_node  
+  async: 600     # Maximum allowed time in Seconds
+  poll: 10       # Polling Interval in Seconds
+  register: start_cl
+  ignore_errors: true
+  tags:
+    - create
+
+- name: Display message for Starting cluster services
+  debug:
+    msg: "Starting cluster services passed."
+  when: start_cl is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message for starting cluster services
+  fail:
+    msg: "{{ start_cl.stderr }}"
+  any_errors_fatal: true
+  when: start_cl is failed and is_current_node
+  tags:
+    - create
+
+- name: Wait for 2 minutes
+  when: is_current_node
+  pause:
+    minutes: 2
+  tags:
+    - create
+
+- name: Check state transition from ST_BARRIER to ST_STABLE
+  shell: "clcmd lssrc -ls clstrmgrES | grep state"
+  register: state_output
+  when: is_current_node
+  retries: 10
+  delay: 30
+  until: "'Current state: ST_STABLE' in state_output.stdout"
+  tags:
+    - create
+
+- name: Display message for cluster state
+  debug:
+    msg: "Cluster is in stable state. Checking if service IP is pingable."
+  when: state_output is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message for cluster state 
+  debug:
+    msg: "Cluster not in stable state, check manually. Stopping cluster services."
+  when: state_output is failed and is_current_node
+  tags:
+    - create
+
+- name: Check NFS - df
+  shell: "df | grep -i {{item.MOUNT_POINT}}"
+  when: is_current_node
+  register: NFS_DISK 
+  ignore_errors: true
+  tags:
+    - create
+
+- name: df output
+  debug:
+    msg: "{{ NFS_DISK.stdout }}"
+  when: NFS_DISK is succeeded and is_current_node
+  tags:
+    - create
+
+- name: df output
+  debug:
+    msg: "{{ NFS_DISK.stderr}}"
+  when: NFS_DISK is failed and is_current_node
+  tags:
+    - create
+
+- name: Get service IP IPADDR and PING IP
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query service_ip {{item.NFS_SERVICE_IP}} | grep -i ipaddr | awk -F '=' '{print $2}' | xargs -I {} ping -c 4 {}"
+  when: is_current_node
+  ignore_errors: true
+  register: IP_addr
+  tags: create
+
+- name: Display message IF service IP is pingable
+  debug:
+    msg: "Service IP is now pingable. Stopping cluster services."
+  when: IP_addr is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message if service Ip is not pingable
+  debug:
+    msg: "{{ IP_addr.stderr }}"
+  when: IP_addr is failed and is_current_node
+  tags:
+    - create
+
+- name: Stop cluster services 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr stop cluster"
+  when: is_current_node  
+  register: stop_cl
+  async: 150     # Maximum allowed time in Seconds
+  poll: 10       # Polling Interval in Seconds
+  ignore_errors: true
+  tags:
+    - create
+
+- name: Display message for Stoping cluster services
+  debug:
+    msg: "Stopping cluster services passed"
+  when: stop_cl is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message for stoping cluster services
+  debug:
+    msg: "Unable to stop the cluster services, Check manually."
+  when: stop_cl is failed and is_current_node  
+  tags:
+    - create

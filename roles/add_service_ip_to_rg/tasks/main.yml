@@ -1,0 +1,69 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for resource_group
+
+# Define variable for repeated condition
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+
+######################################
+
+# Check if cluster exists
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+  when: is_current_node
+  ignore_errors: true
+  register: cluster_exists
+  changed_when: false
+
+# Display messages for cluster existence
+- name: Display message if cluster exists
+  debug:
+    msg: "Cluster already exists."
+  when: 
+    - cluster_exists is succeeded
+    - is_current_node
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist."
+  any_errors_fatal: true
+  when:
+    - cluster_exists is failed
+    - is_current_node
+
+- name: Check RG and ServiceIP data.
+  include_tasks: main2.yml
+  loop: "{{SERVICE_IP_RG}}"
+  when: 
+    - cluster_exists is succeeded 
+    - is_current_node
+
+- name: Verify and Sync after adding the ServiceIP to RG.
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15        # Polling Interval in Seconds
+  register: cluster_sync_create 
+  when: 
+    - is_current_node 
+    - add_service_ip_rg is succeeded
+  ignore_errors: true
+
+- name: cluster sync failed 
+  fail:
+    msg: "{{ cluster_sync_create.stderr }}"
+  when: cluster_sync_create is failed and is_current_node
+
+- name: Cluster sync passed
+  debug:
+    msg: "Cluster synced successfully."
+  when: cluster_sync_create is succeeded and is_current_node
+

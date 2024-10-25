@@ -1,0 +1,168 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+# Define variable for repeated condition
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags:
+    - create
+    - delete
+
+######### Validation ##################
+# Find python path from /hosts file.
+- name: Find python path from /hosts file.
+  shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \'
+  register: python
+  connection: local
+  ignore_errors: true
+  changed_when: false
+  when: is_current_node
+  tags:
+    - always
+
+- set_fact:
+    python_path: "{{python.stdout}}"
+  when: python is succeeded and is_current_node
+  tags:
+    - always
+
+- name: Error Fail to get the python path from /hosts file.
+  fail:
+    msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+  when: python is failed and is_current_node
+  any_errors_fatal: yes
+  tags:
+    - always
+
+- name: Validating input information
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/NFSV4_plugin.py 'create' "
+  connection: local
+  ignore_errors: true
+  when: is_current_node
+  register: output
+  tags:
+    - create
+
+- name: Validating input information
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/NFSV4_plugin.py 'delete' "
+  connection: local
+  ignore_errors: true
+  when: is_current_node
+  register: output
+  tags:
+    - delete
+
+- name: Passed output
+  debug:
+    msg: "Input information validated successfully."
+  when: is_current_node and (output.rc == 0)
+  tags:
+    - create
+    - delete
+
+- name: Failed output
+  fail:
+    msg: "{{output.stdout}}"
+  any_errors_fatal: true
+  when: is_current_node and (output.rc != 0)
+  tags:
+    - create
+    - delete
+
+######################################
+
+# Check if cluster exists
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+  ignore_errors: true
+  when: is_current_node
+  register: cluster_exists
+  tags:
+    - create
+    - delete
+
+# Display messages for cluster existence
+- name: Display message if cluster exists
+  debug:
+    msg: "Cluster exists."
+  when: cluster_exists is succeeded and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist."
+  any_errors_fatal: true
+  when: cluster_exists is failed and is_current_node
+  tags:
+    - delete
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist. Please create a cluster with atleast 1RG,VG,FS,Service IP"
+  any_errors_fatal: true
+  when: cluster_exists is failed and is_current_node
+  tags:
+    - create
+
+- name: Check state transition from ST_BARRIER to ST_STABLE
+  shell: "clcmd lssrc -ls clstrmgrES | grep state"
+  register: state_output
+  when: is_current_node
+  ignore_errors: true
+  until: "'Current state: ST_INIT' in state_output.stdout"
+  tags:
+    - create
+    - delete
+
+- name: Debug message when cluster is in INIT state
+  debug: 
+    msg: "Cluster is in INIT state"
+  when: state_output is succeeded and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Debug message when cluster is in STABLE state
+  debug: 
+    msg: "Cluster not in INIT."
+  when: state_output is failed and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Stop cluster services 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr stop cluster"
+  when: state_output is failed and is_current_node  
+  async: 300     # Maximum allowed time in Seconds
+  poll: 10       # Polling Interval in Seconds
+  register: stop_cl
+  ignore_errors: true
+  tags:
+    - create
+    - delete
+
+- name: Debug message when cluster is in INIT state
+  fail: 
+    msg: "Unable to stop the cluster services."
+  any_errors_fatal: true
+  when: stop_cl is failed and state_output is failed and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Creation Part for NFSv4
+  include_tasks: main2.yml
+  loop: "{{ NFSv4 }}"
+  tags:
+    - create
+    - delete

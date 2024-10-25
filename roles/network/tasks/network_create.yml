@@ -1,0 +1,52 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+- name: Check if Network exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query network {{item.NAME}} "
+  when: is_current_node
+  ignore_errors: true
+  register: network_check
+  changed_when: false
+
+- name: Debug Message Error for Network Check 
+  debug:
+    msg: "Network {{ item.NAME }} already exists. Hence skipping the Network {{ item.NAME }} creation."
+  when: 
+    - network_check is succeeded
+    - is_current_node
+    - Using_for_Cloud_catalog is not defined
+
+- block: 
+  - name: Debug Message for Network Check.
+    debug:
+      msg: "Network {{ item.NAME }} does not exist."
+
+  - name: Create Network
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add network {{item.NAME}} TYPE={{item.TYPE}}"
+    register: network_create
+    ignore_errors: true
+
+  # Debug message for Pass (Success)
+  - name: Debug Message for Network Creation (Pass)
+    debug:
+      msg: "Network {{ item.NAME }} created successfully."
+    when: 
+      - network_create is succeeded
+
+  # Debug message for Fail (Error)
+  - name: Debug Message for Network Creation (Fail)
+    fail:
+      msg: "{{ network_create.results | map(attribute='stderr') | list | join('\n') }}"
+    when:
+      - network_create is failed
+    any_errors_fatal: true
+
+  when:
+    - is_current_node
+    - network_check is failed

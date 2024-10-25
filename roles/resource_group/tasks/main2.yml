@@ -1,0 +1,100 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# Check if RG exists
+- name: Check if RG exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.name}}"
+  register: check_rg
+  ignore_errors: true
+  when: is_current_node
+  changed_when: false
+  tags:
+    - create
+    - delete
+
+# Display messages for RG existence
+- name: Display message if RG already exists
+  debug:
+    msg: "RG {{item.name}} already exists on the cluster. Hence skipping the RG {{item.name}} creation."
+  when: check_rg is succeeded and is_current_node
+  tags:
+    - create
+
+- block:
+
+  - name: Display message if RG doesn't exist
+    debug:
+      msg: "As expected RG {{item.name}} doesn't exist."
+    when: check_rg is failed and is_current_node
+
+  # Create Resource Group
+  - name: Create Resource Group for standard cluster
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add resource_group {{item.name}} STARTUP={{item.STARTUP}} FALLOVER={{item.FALLOVER}} FALLBACK={{item.FALLBACK}}"
+    when: is_current_node and cl_type == 'Standard'
+    ignore_errors: true
+    register: create_rg
+
+  # Create Resource Group
+  - name: Create Resource Group for site based cluster
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add resource_group {{item.name}} STARTUP={{item.STARTUP}} FALLOVER={{item.FALLOVER}} FALLBACK={{item.FALLBACK}} NODES={{SITE1_NODES}} SECONDARYNODES={{SITE2_NODES}} SITE_POLICY={{item.SITE_POLICY}}"
+    when: is_current_node and cl_type != 'Standard'
+    ignore_errors: true
+    register: create_rg
+
+  # Handle RG creation results
+  - name: RG creation failed
+    fail:
+      msg: "RG {{item.name}} creation failed. {{create_rg.stderr}}"
+    when: create_rg is failed and is_current_node
+
+  - name: RG creation passed
+    debug:
+      msg: "RG {{item.name}} creation Successful."
+    when: create_rg is succeeded and is_current_node
+
+  when: check_rg is failed and is_current_node
+  tags:
+    - create
+
+- name: Display message if RG doesn't exist
+  debug:
+    msg: "RG {{item.name}} doesn't exist on Cluster. Hence skipping the RG {{item.name}} deletion part."
+  when: check_rg is failed and is_current_node
+  tags:
+    - delete
+
+- block:
+
+  # Display messages for RG existence
+  - name: Display message if RG already exists
+    debug:
+      msg: "as expected RG {{item.name}} already exists."
+
+  # Delete Resource Group
+  - name: Delete Resource Group
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete resource_group {{item.name}}"
+    when: is_current_node and check_rg is succeeded
+    ignore_errors: true
+    register: delete_rg
+
+  # Handle RG deletion results
+  - name: RG deletion failed
+    debug:
+      var: "{{item.name}} RG Deletion failed"
+    when: delete_rg is failed and is_current_node and check_rg is succeeded
+
+  - name: RG deletion passed
+    debug:
+      msg: "{{item.name}} RG deleted successfully."
+    when: delete_rg is succeeded and is_current_node and check_rg is succeeded
+
+  when: check_rg is succeeded and is_current_node
+  tags:
+    - delete
+

@@ -1,0 +1,412 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+# Define variable for repeated condition
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags:
+    - create
+    - delete
+
+######### Validation ##################
+
+- block:
+  # Find python path from /hosts file.
+  - name: Find python path from /hosts file.
+    shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \'
+    register: python
+    connection: local
+    ignore_errors: true
+    changed_when: false
+    when: is_current_node
+
+  - set_fact:
+      python_path: "{{python.stdout}}"
+    when: python is succeeded and is_current_node
+
+  - name: Error Fail to get the python path from /hosts file.
+    fail:
+      msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+    when: python is failed and is_current_node
+    any_errors_fatal: yes
+
+  - name: Validating input information
+    ansible.builtin.raw: "{{python_path}} /plugins/modules/NETWORK_plugin.py 'create' "
+    connection: local
+    ignore_errors: true
+    when: is_current_node
+    changed_when: false
+    register: output
+
+  - name: Passed output
+    debug:
+      msg: "Input information validated successfully."
+    when: is_current_node and (output.rc == 0)
+
+  - name: Failed output
+    fail:
+      msg: "{{output.stdout}}"
+    any_errors_fatal: true
+    when: is_current_node and (output.rc != 0)
+
+  ######################################
+
+  # Check if cluster exists
+  - name: Check if cluster exists
+    shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+    ignore_errors: true
+    when: is_current_node
+    register: cluster_exists
+    changed_when: false
+
+  # Display messages for cluster existence
+  - name: Display message if cluster exists
+    debug:
+      msg: "Cluster already exists."
+    when: cluster_exists is succeeded and is_current_node
+
+  - name: Display message if cluster doesn't exist
+    fail:
+      msg: "Cluster doesn't exist."
+    any_errors_fatal: true
+    when: cluster_exists is failed and is_current_node
+
+  ########################### FIXING Network issue on Cloud ###########################
+  
+  - name: Get the existing Networks.
+    shell: "/usr/es/sbin/cluster/utilities/clmgr query network"
+    ignore_errors: true
+    register: ext_network
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - cluster_exists is succeeded
+    tags:
+      - create
+  
+  - name: Getting the value of networks.
+    set_fact:
+      def_network: "{{ext_network.stdout_lines[0]}}"
+    ignore_errors: true
+    when:
+      - is_current_node
+      - ext_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  - name: Display message Default networks post creating cluster.
+    debug:
+      msg: "Default networks are {{def_network}}"
+    when:
+      - is_current_node
+      - ext_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  - name: Getting the site1 Nodes.
+    set_fact:
+      def_nodes1: "{{ SITE1_NODES.split(',')}}"
+    ignore_errors: true
+    when:
+      - is_current_node
+      - ext_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  - name: Change the existing interface of network in site1. 
+    shell: " /usr/es/sbin/cluster/utilities/clmgr modify interface {{item}} NETWORK={{def_network}}"
+    ignore_errors: true
+    register: change_network
+    loop: "{{def_nodes1}}"
+    when:
+      - is_current_node
+      - ext_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  - name: Getting the site2 Nodes.
+    set_fact:
+      def_nodes2: "{{ SITE2_NODES.split(',')}}"
+    ignore_errors: true
+    when:
+      - is_current_node
+      - ext_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  - name: Change the existing interface of network in site2. 
+    shell: " /usr/es/sbin/cluster/utilities/clmgr modify interface {{item}} NETWORK={{def_network}}"
+    ignore_errors: true
+    register: change_network
+    loop: "{{def_nodes2}}"
+    when:
+      - is_current_node
+      - ext_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    ignore_errors: true
+    register: cluster_sync_create2
+    when: 
+      - is_current_node
+      - change_network is succeeded
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  
+  # Handle cluster sync results (Create)
+  - name: cluster sync failed (Create)
+    fail:
+      msg: "{{ cluster_sync_create.stderr }}"
+    when: 
+      - cluster_sync_create2 is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+    any_errors_fatal: true
+    tags:
+      - create
+  
+  - name: Cluster sync passed (Create)
+    debug:
+      msg: "Cluster synced successfully."
+    when: 
+      - cluster_sync_create2 is succeeded 
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+    tags:
+      - create
+  ####################################################################################
+
+  - name: get the existing network and change
+    shell: "/usr/es/sbin/cluster/utilities/clmgr query network"
+    ignore_errors: true
+    register: ext_network
+    changed_when: false
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+
+  - name: Getting the value of cluster type
+    set_fact:
+      def_network: "{{ext_network.stdout}}"
+    any_errors_fatal: true
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+
+  - name: Change the existing network 
+    shell: " /usr/es/sbin/cluster/utilities/clmgr modify network {{def_network}} NAME=net_ether_01 TYPE=ether"
+    ignore_errors: true
+    register: change_network
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - GLVM is not defined
+
+  - name: Change the existing network 
+    shell: " /usr/es/sbin/cluster/utilities/clmgr modify network {{def_network}} NAME=net_XD_data_01 TYPE=XD_data"
+    ignore_errors: true
+    register: change_network
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - GLVM is defined
+
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    ignore_errors: true
+    register: cluster_sync_create3
+    when: 
+      - is_current_node
+      - change_network is succeeded
+      - Using_for_Cloud_catalog is defined
+
+  # Handle cluster sync results (Create)
+  - name: cluster sync failed (Create)
+    fail:
+      msg: "{{ cluster_sync_create3.stderr }}"
+    when: 
+      - cluster_sync_create3 is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+    any_errors_fatal: true
+
+  - name: Cluster sync passed (Create)
+    debug:
+      msg: "Cluster synced successfully."
+    when: 
+      - cluster_sync_create3 is succeeded 
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+
+  - name: Check Network data.
+    include_tasks: network_create.yml
+    loop: "{{ NETWORK }}"
+    when: cluster_exists is succeeded
+
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    ignore_errors: true
+    register: cluster_sync_create
+    when: 
+      - is_current_node
+      - network_create is succeeded
+
+  # Handle cluster sync results (Create)
+  - name: cluster sync failed (Create)
+    fail:
+      msg: "{{ cluster_sync_create.stderr }}"
+    when: cluster_sync_create is failed and is_current_node
+    any_errors_fatal: true
+
+  - name: Cluster sync passed (Create)
+    debug:
+      msg: "Cluster synced successfully."
+    when: cluster_sync_create is succeeded and is_current_node
+
+  when: NETWORK is defined
+  tags:
+    - create
+
+###############Delete block#############
+- block:
+  # Find python path from /hosts file.
+  - name: Find python path from /hosts file.
+    shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \'
+    register: python
+    connection: local
+    ignore_errors: true
+    changed_when: false
+    when: is_current_node
+
+  - set_fact:
+      python_path: "{{python.stdout}}"
+    when: python is succeeded and is_current_node
+
+  - name: Error Fail to get the python path from /hosts file.
+    fail:
+      msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+    when: python is failed and is_current_node
+    any_errors_fatal: yes
+
+  - name: Validating input information
+    ansible.builtin.raw: "{{python_path}} /plugins/modules/NETWORK_plugin.py 'delete' "
+    connection: local
+    ignore_errors: true
+    when: is_current_node
+    register: output
+    changed_when: false
+    tags:
+      - delete
+
+  - name: Passed output
+    debug:
+      msg: "Input information validated successfully."
+    when: is_current_node and (output.rc == 0)
+
+  - name: Failed output
+    fail:
+      msg: "{{output.stdout}}"
+    any_errors_fatal: true
+    when: is_current_node and (output.rc != 0)
+
+  ######################################
+
+  # Check if cluster exists
+  - name: Check if cluster exists
+    shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+    ignore_errors: true
+    when: is_current_node
+    register: cluster_exists
+    changed_when: false
+
+  # Display messages for cluster existence
+  - name: Display message if cluster exists
+    debug:
+      msg: "Cluster already exists."
+    when: cluster_exists is succeeded and is_current_node
+
+  - name: Display message if cluster doesn't exist
+    fail:
+      msg: "Cluster doesn't exist."
+    any_errors_fatal: true
+    when: cluster_exists is failed and is_current_node
+
+  - name: Check Network data.
+    include_tasks: network_delete.yml
+    loop: "{{ NETWORK }}"
+    when: cluster_exists is succeeded
+
+  # Verify and Sync (Delete)
+  - name: Verify and Sync (Delete)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_delete
+    ignore_errors: true
+    when:
+      - network_delete is succeeded
+      - is_current_node
+
+  # Handle cluster sync results (Delete)
+  - name: cluster sync failed (Delete)
+    fail:
+      msg: "{{ cluster_sync_delete.stderr }}"
+    when: cluster_sync_delete is failed and is_current_node
+    any_errors_fatal: true
+
+  - name: Cluster sync passed (Delete)
+    debug:
+      msg: "Cluster synced successfully."
+    when: network_check is succeeded and is_current_node
+
+  when: NETWORK is defined
+  tags:
+    - delete
+
+- name: Display message if NETWORK details are not defined.
+  debug:
+    msg: "Define the NETWORK details in /external_var.yml file and run again."
+  when: 
+    - NETWORK is not defined
+    - Using_for_Cloud_catalog is defined
+    - is_current_node
+  tags:
+    - always
+
+- name: Error message if NETWORK details are not defined.
+  fail:
+    msg: "Define the NETWORK details in /external_var.yml file and run again."
+  any_errors_fatal: yes
+  when:
+    - NETWORK is not defined
+    - Using_for_Cloud_catalog is not defined 
+    - is_current_node
+  tags:
+    - always
+

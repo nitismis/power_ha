@@ -1,0 +1,127 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for service_ip
+
+- name: Check if ServiceIP {{item.NAME}} already exists or not. 
+  shell: "CLMGR_TIMEOUT=120 /usr/es/sbin/cluster/utilities/clmgr query service_ip {{item.NAME}}"
+  register: check_service_ip
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - create
+
+- name: Check if NETWORK {{item.NETWORK}} exists or not. 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query network {{item.NETWORK}}"
+  register: check_network
+  changed_when: false
+  ignore_errors: true
+  when: check_service_ip is succeeded
+  tags:
+    - create
+
+- name: Debug Message ServiceIP Already Existed.
+  debug:
+    msg: "ServiceIP {{ item.NAME }} exists. Hence skipping the ServiceIP {{ item.NAME }} creation."
+  when: 
+    - check_service_ip is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Debug Message Network {{item.NETWORK}} not available.
+  debug:
+    msg: "Network {{item.NETWORK}} is not exists. Hence skipping the ServiceIP {{ item.NAME }} creation."
+  when: 
+    - check_network is failed and is_current_node
+  tags:
+    - create
+
+- block:
+
+  - name: As Expected ServiceIP not Exist.
+    debug:
+      msg: "As Expected ServiceIP {{ item.NAME }} not exists."
+    when: 
+      - is_current_node
+
+  - name: As Expected {{item.NETWORK}} is available.
+    debug:
+      msg: "As Expected Network {{item.NETWORK}} is exists."
+    when: 
+      - is_current_node
+
+  - name: get the Cluster type
+    shell: "/usr/es/sbin/cluster/utilities/cltopinfo | grep -i 'Cluster Type' | cut -d ':' -f 2 | tr -d ' \t'"
+    register: cluster_type
+    when: is_current_node
+    changed_when: false
+    ignore_errors: true
+
+  - name: Getting the value of cluster type
+    set_fact:
+      cl_type: "{{cluster_type.stdout}}"
+    any_errors_fatal: true
+    when: is_current_node
+
+  - name: Add ServiceIP mappings to /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ item.IP }} {{ item.NAME }}"
+      create: yes 
+    register: add_Service_ip
+    when: 
+      - check_network is succeeded
+
+  # Debug message for "pass" case
+  - name: Debug - Add ServiceIP mappings succeeded
+    debug:
+      msg: "ServiceIP mappings added successfully to /etc/hosts"
+    when: add_Service_ip is succeeded and is_current_node
+
+  # Debug message for "fail" case
+  - name: Debug - Add ServiceIP mappings failed
+    fail:
+      msg: "Failed to add ServiceIP mappings to /etc/hosts"
+    when: add_Service_ip is failed and is_current_node
+    any_errors_fatal: true
+
+  - name: refreshing nodes
+    shell: stopsrc -s clcomd; sleep 10; startsrc -s clcomd
+    register: output_refresh
+    when: add_Service_ip is changed
+
+  - name: Create Service IP in standard
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add service_ip {{item.NAME}} NETWORK={{item.NETWORK}}"
+    register: sip_create
+    any_errors_fatal: true
+    when:
+      - is_current_node
+      - cl_type == 'Standard'
+
+  - name: Create Service IP in site based cluster
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add service_ip {{item.NAME}} NETWORK={{item.NETWORK}} SITE={{item.SITE}}"
+    register: sip_create
+    any_errors_fatal: true
+    when:
+      - is_current_node
+      - cl_type != 'Standard'
+
+  # Debug message for Pass (Success)
+  - name: Debug Message for service IP Creation (Pass)
+    debug:
+      msg: "Service IP {{ item.NAME }} created successfully."
+    when: 
+      - sip_create is succeeded
+      - is_current_node
+
+  when: 
+    - check_service_ip is failed 
+    - check_network is succeeded
+  tags:
+    - create

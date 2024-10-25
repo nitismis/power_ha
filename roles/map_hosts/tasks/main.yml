@@ -1,0 +1,100 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+- name: Add mappings to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.ip }} {{ item.full_name }} {{ item.name }}"
+    create: yes 
+  with_items:
+    "{{NODE_DETAILS}}"
+  register: add_hosts
+  when: Using_for_Cloud_catalog is not defined
+
+- name: Add mappings to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.ip }} {{ item.full_name }}"
+    create: yes 
+  with_items:
+    "{{NODE_DETAILS}}"
+  register: add_hosts
+  when: Using_for_Cloud_catalog is defined and Using_for_Cloud_catalog == True
+
+- name: message 
+  debug: 
+    msg: "Added host data to /etc/hosts"
+  when: add_hosts is changed
+    
+- name: Updating hosts in /etc/cluster/rhosts file
+  lineinfile:
+    path: /etc/cluster/rhosts
+    line: "{{ item.ip }}"
+    create: yes
+  with_items:
+     "{{NODE_DETAILS}}"
+  register: map_ip
+  
+- name: message 
+  debug: 
+    msg: "Added host data to /etc/cluster/rhosts"
+  when: map_ip is changed
+  
+- name: refreshing nodes
+  shell: refresh -s clcomd
+  register: output_refresh
+  when: add_hosts is changed or map_ip is changed
+
+- name: message 
+  debug: 
+    msg: "Nodes refreshed"
+  when: add_hosts is changed or map_ip is changed
+
+- name: Doing CFGMGR on nodes
+  shell: cfgmgr
+  register: cfgmgr_output
+
+- name: message 
+  debug: 
+    msg: "cfgmgr is done"
+  when: cfgmgr_output is changed
+
+- name: List the PVID not assigned disks.
+  shell: lspv | awk '{if ($2=="none") { print $1 }}'
+  register: lspv_output
+  changed_when: false
+  when: cfgmgr_output is changed
+
+- set_fact:
+    lspv_data: "{{ lspv_output.stdout_lines }}"
+
+- name: message 
+  debug: 
+    msg: "lspv data is collected"
+  when: lspv_output is changed
+
+- name: Assign PVID's for lspv data disks
+  shell: chdev -l {{item}} -a pv=yes
+  with_items:
+    "{{lspv_data}}"
+  register: add_pvid
+
+- name: message 
+  debug: 
+    msg: "Assign the PVID's for lspv data disks successfully"
+  when: add_pvid is changed
+
+- name: Doing CFGMGR on nodes post PVID assignation
+  shell: cfgmgr
+  register: cfgmgr_output2
+
+- name: message 
+  debug: 
+    msg: "cfgmgr is done post PVID assignation"
+  when: cfgmgr_output2 is changed

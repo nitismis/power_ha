@@ -1,0 +1,91 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for persistent_ip
+- name: Check if persistent_ip exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query persistent_ip {{ item.NAME }}"
+  register: check_persistent_ip
+  when: cluster_exists is succeeded
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - create
+
+- name: Error Message for persistent_ip Check
+  debug:
+    msg: "persistent_ip {{ item.NAME }} already exists. Hence skipping the persistent_ip {{ item.NAME }} creation"
+  when:
+    - check_persistent_ip is succeeded
+    - is_current_node
+  tags: create
+
+- block:
+
+  - name: Debug Message for persistent_ip Check
+    debug:
+      msg: "As Expected persistent_ip {{ item.NAME }} does not exist."
+    when:
+      - is_current_node
+
+  - name: Add persistent_ip mappings to /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ item.IP }} {{ item.NAME }}"
+      create: yes
+    register: add_persistent_ip
+    ignore_errors: true
+
+  # Debug message for "pass" case
+  - name: Debug - Add persistent_ip mappings succeeded
+    debug:
+      msg: "persistent_ip mappings added successfully to /etc/hosts"
+    when:
+      - add_persistent_ip is succeeded
+
+  # Debug message for "fail" case
+  - name: Debug - Add persistent_ip mappings failed
+    fail:
+      msg: "Failed to add persistent_ip mappings to /etc/hosts"
+    any_errors_fatal: true
+    when:
+      - add_persistent_ip is failed
+
+  - name: refreshing nodes
+    shell: stopsrc -s clcomd; sleep 10; startsrc -s clcomd
+    register: output_refresh
+    when:
+      - add_persistent_ip is changed
+
+  - name: Create persistent_ip
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add persistent_ip {{ item.NAME }} NETWORK={{ item.NETWORK }} NODE={{ item.NODE }}"
+    register: persistent_ip_create
+    any_errors_fatal: true
+    when:
+      - is_current_node
+
+  # Debug message for Pass (Success)
+  - name: Debug Message for persistent_ip Creation (Pass)
+    debug:
+      msg: "persistent_ip {{ item.NAME }} created successfully."
+    when:
+      - persistent_ip_create is succeeded
+      - is_current_node
+
+  # Debug message for Fail (Error)
+  - name: Debug Message for persistent_ip Creation (Fail)
+    fail:
+      msg: "{{ persistent_ip_create.stderr }}"
+    when:
+      - persistent_ip_create is failed
+      - is_current_node
+    any_errors_fatal: true
+
+  when:
+    - check_persistent_ip is failed
+  tags: create

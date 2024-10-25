@@ -1,0 +1,371 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+# External Var File Inputs checking ##
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags: always
+
+- name: Check if POWERHA_BLD_PATH value is not blank
+  fail:
+    msg: "POWERHA_BLD_PATH valuse is blank in external var file."
+  when: POWERHA_BLD_PATH is not defined or not POWERHA_BLD_PATH and is_current_node
+  any_errors_fatal: yes
+  tags:
+    - install
+
+# check the PowerHA GA build path.
+- name: Check the PowerHA GA build path.
+  shell: "find {{POWERHA_BLD_PATH}}GOLD* -name 'cluster*' | head -1 | sed 's/\\/[^/]*$//' |grep . "
+  register: find_powerha_path
+  ignore_errors: true
+  changed_when: false
+  when:
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - install
+
+- set_fact:
+    powerha_ga_path: "{{find_powerha_path.stdout}}"
+  when:
+    - find_powerha_path is succeeded
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - install
+
+- name: Display PowerHA GA path.
+  debug:
+    msg: "{{powerha_ga_path}}"
+  when:
+    - find_powerha_path is succeeded
+    - is_current_node
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - install
+
+- name: Error Fail to get the powerHA GA path.
+  fail:
+    msg: "Unable to find the PowerHA buld path"
+  when:
+    - find_powerha_path is failed
+    - is_current_node
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  any_errors_fatal: yes
+  tags:
+    - install
+
+# check the PowerHA SP build path.
+- name: Check the PowerHA SP build path.
+  shell: "find {{POWERHA_BLD_PATH}}SP* -name 'cluster*' | head -1 | sed 's/\\/[^/]*$//' |grep . "
+  register: find_powerha_sp_path
+  ignore_errors: true
+  changed_when: false
+  when:
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - install
+
+- set_fact:
+    powerha_sp_path: "{{find_powerha_sp_path.stdout}}"
+  when:
+    - find_powerha_sp_path is succeeded
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - install
+
+- name: Display SP path.
+  debug:
+    msg: "{{powerha_sp_path}}"
+  when:
+    - find_powerha_sp_path is succeeded
+    - is_current_node
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - install
+
+- name: Display message External Var File verification Completed.
+  debug:
+    msg: "External Var File verification Completed."
+  when: is_current_node
+  tags:
+    - install
+
+# check already PowerHA installed on nodes.
+- name: Check PowerHA Already installed on the node or not.
+  shell: "/usr/es/sbin/cluster/utilities/halevel -s"
+  register: powerha_check
+  ignore_errors: true
+  changed_when: false
+  when: find_powerha_path is succeeded
+  tags: install
+
+- name: PowerHA is Already installed. - Error Message
+  debug:
+    msg: "Error: PowerHA is Already installed on the node {{ansible_hostname}}. Hence skipping the installation on {{ansible_hostname}}"
+  when: powerha_check is succeeded
+  tags: install
+
+- block:
+  - name: Display message As Expected PowerHA is not Installed.
+    debug:
+      msg: "As Expected PowerHA is not Installed on the Node {{ansible_hostname}}"
+    when: powerha_check is failed
+    tags:
+      - install
+
+  - name: Check Absolute PowerHA Build path is available or not.
+    shell: pwd
+    args:
+      chdir: "{{powerha_ga_path}}"
+    register : pha_bld_path
+    changed_when: false
+    ignore_errors: true
+    when:
+      - powerha_check is failed
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags: install
+
+  - name: Check Absolute PowerHA Build path is available or not.
+    shell: "find {{POWERHA_BLD_PATH}} -name 'cluster*' |grep . "
+    register : pha_bld_path
+    changed_when: false
+    ignore_errors: true
+    when:
+      - powerha_check is failed
+      - Using_for_Cloud_catalog is not defined
+    tags: install
+
+  - name: Display message PowerHA Build Absolute path is available.
+    debug:
+      msg: "PowerHA Build Absolute path is available on Node {{ansible_hostname}} Hence proceeding with installation"
+    when: pha_bld_path is succeeded
+    tags:
+      - install
+
+  - name: PowerHA Build Absolute path is not available. - Error Message
+    fail:
+      msg: "Error: PowerHA Build Absolute path is not available on Node {{ansible_hostname}}."
+    any_errors_fatal: yes
+    when:  pha_bld_path is failed
+    tags: install
+
+  - name: Install PowerHA
+    shell: /usr/sbin/installp -acgXYd . all
+    async: 3600 # Maximum allowed time in Seconds
+    poll: 30 # Polling Interval in Seconds
+    args:
+      chdir: "{{powerha_ga_path}}"
+    register : pha_install_result
+    when:
+      - powerha_check is failed
+      - pha_bld_path is succeeded
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags: install
+
+  - name: Install PowerHA
+    shell: /usr/sbin/installp -acgXYd . all
+    async: 3600 # Maximum allowed time in Seconds
+    poll: 30 # Polling Interval in Seconds
+    args:
+      chdir: "{{POWERHA_BLD_PATH}}"
+    register : pha_install_result
+    when:
+      - powerha_check is failed
+      - pha_bld_path is succeeded
+      - Using_for_Cloud_catalog is not defined
+    tags: install
+
+  - name: Display message PowerHA Installation is Completed.
+    debug:
+      msg: "PowerHA Installation is Completed on Node {{ansible_hostname}}"
+    when: pha_install_result is succeeded
+    tags:
+      - install
+
+  - name: Unable to Install the PowerHA. - Error Message
+    fail:
+      msg: "Error: Failed to Install the PowerHA on Node {{ansible_hostname}}."
+    any_errors_fatal: yes
+    when:  pha_install_result is failed
+    tags: install
+
+  - name: Check PowerHA Already installed on node's or not for SP.
+    shell: "/usr/es/sbin/cluster/utilities/halevel -s"
+    register: powerha_result
+    changed_when: false
+    ignore_errors: true
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+    tags:
+      - install
+
+  - name: Display message As Expected PowerHA is Already Installed.
+    debug:
+      msg: "As Expected PowerHA is Already Installed on {{ansible_hostname}} node"
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - powerha_result is succeeded
+    tags:
+      - install
+
+  - name: PowerHA is Not installed. - Error Message
+    fail:
+      msg: "Error: PowerHA is not installed on {{ansible_hostname}} node. Please remove {{inventory_hostname}} entry from /hosts file and Run again"
+    any_errors_fatal: yes
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - powerha_result is failed
+    tags:
+      - install
+
+  - name: Check Absolute PowerHA_SP Build path is available or not.
+    shell: "find {{powerha_sp_path}} -name 'cluster*' |grep . "
+    register : pha_bld_path
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - powerha_result is succeeded
+    changed_when: false
+    ignore_errors: true
+    tags:
+      - install
+
+  - name: Display message PowerHA_SP Build Absolute path is available.
+    debug:
+      msg: "PowerHA_SP Build Absolute path is available on Node {{ansible_hostname}} Hence proceeding with PowerHA Upgradation"
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - pha_bld_path is succeeded
+    tags:
+      - install
+
+  - name: PowerHA_SP Build Absolute path is not available. - Error Message
+    fail:
+      msg: "Error: PowerHA_SP Build Absolute path is not available on Node {{ansible_hostname}}."
+    any_errors_fatal: yes
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - pha_bld_path is failed
+    tags:
+      - install
+
+  - name: upgrade PowerHA
+    shell: /usr/sbin/installp -agXYd . all
+    async: 3600 # Maximum allowed time in Seconds
+    poll: 30 # Polling Interval in Seconds
+    args:
+      chdir: "{{powerha_sp_path}}"
+    register : pha_upgrade_result
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - powerha_result is succeeded
+      - pha_bld_path is succeeded
+    tags:
+      - install
+
+  - name: Display message PowerHA Upgradation is Completed.
+    debug:
+      msg: "PowerHA upgrade is Completed on Node {{ansible_hostname}}"
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - pha_upgrade_result is succeeded
+    tags:
+      - install
+
+  - name: Unable to upgrade the PowerHA. - Error Message
+    fail:
+      msg: "Error: Failed to upgrade the PowerHA on Node {{ansible_hostname}}."
+    any_errors_fatal: yes
+    when:
+      - Using_for_Cloud_catalog is defined
+      - find_powerha_sp_path is succeeded
+      - pha_upgrade_result is failed
+    tags:
+      - install
+  when: powerha_check is failed
+  tags:
+    - install
+
+- name: Check PowerHA Already installed on node's or not.
+  shell: "/usr/es/sbin/cluster/utilities/halevel -s"
+  register: powerha_result
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - uninstall
+
+- name: PowerHA is Not installed. - Error Message
+  debug:
+    msg: "Error: PowerHA is not installed on {{ansible_hostname}} node. Hence skipping the deletion operation on {{ansible_hostname}} node"
+  when: powerha_result is failed
+  tags:
+    - uninstall
+
+- block:
+  - name: Display message As Expected PowerHA is Already Installed.
+    debug:
+      msg: "As Expected PowerHA is Already Installed on {{ansible_hostname}} node"
+    when: powerha_result is succeeded
+
+  # Check if cluster exists
+  - name: Check if cluster exists
+    shell: /usr/es/sbin/cluster/utilities/clmgr query cluster
+    ignore_errors: true
+    register: cluster_exists
+    when: powerha_result is succeeded
+    changed_when: false
+
+  # Display messages for cluster existence
+  - name: Display message if cluster exists
+    fail:
+      msg: "Cluster exists on {{ansible_hostname}} node. Please delete the cluster by using cluster Playbook."
+    when: cluster_exists is succeeded
+    any_errors_fatal: yes
+
+  - block:
+    - name: Uninstall PowerHA
+      shell: "/usr/sbin/installp -ug cluster"
+      async: 3600
+      poll: 30
+      register: pha_remove
+      tags: uninstall
+    when: powerha_result is succeeded
+
+  - name: Display message If PowerHA uninstalled.
+    debug:
+      msg: "Successfully uninstalled the PowerHA on {{ansible_hostname}} node."
+    when: pha_remove is succeeded
+
+  - name: Failed to uninstall the PowerHA -Error
+    fail:
+      msg: "Failed to uninstall the PowerHA on {{ansible_hostname}} node."
+    when: pha_remove is failed
+    any_errors_fatal: yes
+
+  when: powerha_result is succeeded
+  tags:
+    - uninstall

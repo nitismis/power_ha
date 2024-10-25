@@ -1,0 +1,621 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags: always
+
+- name: Check if repository is not blank
+  fail:
+    msg: "Repository in external var is blank."
+  when: (is_current_node and REPOSITORIES is not defined) or (is_current_node and not REPOSITORIES)
+  connection: local
+  tags:
+    - standard
+    - stretched
+
+- name: Check if Site repositories is not blank
+  fail:
+    msg: "Site Repositories in external var is blank."
+  when: is_current_node and (SITE1_REPOSITORIES is not defined or not SITE1_REPOSITORIES or SITE2_REPOSITORIES is not defined or not SITE2_REPOSITORIES)
+  connection: local
+  tags:
+    - linked
+
+- name: Check if Nodes are not blank
+  fail:
+    msg: "NODES in external var is blank."
+  connection: local
+  when:
+    - is_current_node
+    - (NODES is not defined or not NODES)
+  tags:
+    - standard
+
+- name: Check if Site Nodes are not blank
+  fail:
+    msg: "Site NODES in external var is blank."
+  when:
+    - is_current_node
+    - (SITE1_NODES is not defined or not SITE1_NODES or SITE2_NODES is not defined or not SITE2_NODES)
+  connection: local
+  tags:
+    - stretched
+    - linked
+
+- name: Display message External Var verification Completed
+  debug:
+    msg: "External Var verification Completed."
+  when: is_current_node
+  tags:
+    - standard
+    - stretched
+    - linked
+
+##############################################################
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster
+  ignore_errors: true
+  register: cluster_exists
+  tags:
+    - standard
+    - stretched
+    - linked
+    - delete
+
+- name: Display message if cluster already exists
+  debug:
+    msg: "Cluster already exists. Hence skipping the cluster creation."
+  when:
+    - cluster_exists is succeeded
+    - is_current_node
+  tags:
+    - standard
+    - stretched
+    - linked
+
+- block:
+  - name: Display message if cluster doesn't exist
+    debug:
+      msg: "As expected Cluster doesn't exist."
+    when:
+      - cluster_exists is failed
+    tags:
+      - standard
+      - stretched
+      - linked
+  ##################################################
+  - name: Collect the PVID from the Disk WWN number.
+    shell: "lspv -u | grep -i {{REPOSITORIES}} | awk '{ print $2}'"
+    register: pvid_from_wwn
+    when:
+      - cluster_exists is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - standard
+      - stretched
+
+  - set_fact:
+      disk_pvid: "{{ pvid_from_wwn.stdout }}"
+    tags:
+      - standard
+      - stretched
+    when:
+      - pvid_from_wwn is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+
+  - name: Display message Collected the PVID from the Disk WWN number.
+    debug:
+      msg: "Collected the PVID from the Disk WWN number."
+    when:
+      - pvid_from_wwn is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - standard
+      - stretched
+
+  - name: Error message Collect the PVID from the Disk WWN number.
+    fail:
+      msg: "Fail to collect the PVID from the Disk WWN number."
+    any_errors_fatal: true
+    when:
+      - pvid_from_wwn is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - standard
+      - stretched
+  ##################################################
+  - name: Create Standard Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr add cl NODES={{NODES}} TYPE=NSC REPOSITORIES={{disk_pvid}}
+    async: 3600
+    poll: 15
+    ignore_errors: true
+    register: cluster_create
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - standard
+
+  - name: Create Standard Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr add cl NODES={{NODES}} TYPE=NSC REPOSITORIES={{REPOSITORIES}}
+    async: 3600
+    poll: 15
+    ignore_errors: true
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is not defined
+    register: cluster_create
+    tags:
+      - standard
+
+  - name: Cluster creation passed
+    debug:
+      msg: "Cluster creation successful."
+    when:
+      - cluster_create is succeeded
+      - is_current_node
+    tags:
+      - standard
+
+  - name: Cluster creation failed
+    fail:
+      msg: "{{ cluster_create.stderr | regex_findall('ERROR: (.*)') | join('\n') }}"
+    any_errors_fatal: true
+    when:
+      - cluster_create is failed
+      - is_current_node
+    tags:
+      - standard
+
+  - name: Create Stretched Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr add cl NODES={{NODES}} TYPE=SC REPOSITORIES={{disk_pvid}}
+    async: 3600
+    poll: 15
+    ignore_errors: true
+    register: stretched_cluster_create
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - stretched
+
+  - name: Create Stretched Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr add cl NODES={{NODES}} TYPE=SC REPOSITORIES={{REPOSITORIES}}
+    async: 3600
+    poll: 15
+    ignore_errors: true
+    register: stretched_cluster_create
+    when:
+      - is_current_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - stretched
+
+  - name: Cluster creation passed
+    debug:
+      msg: "Cluster creation successful."
+    when:
+      - is_current_node
+      - stretched_cluster_create is succeeded
+    tags:
+      - stretched
+
+  - name: Cluster creation failed
+    fail:
+      msg: "{{ stretched_cluster_create.stderr | regex_findall('ERROR: (.*)') | join('\n') }}"
+    any_errors_fatal: true
+    when:
+      - is_current_node
+      - stretched_cluster_create is failed
+    tags:
+      - stretched
+
+  - name: Add Nodes to site1
+    shell: /usr/es/sbin/cluster/utilities/clmgr add site site1 NODES={{SITE1_NODES}}
+    when:
+      - is_current_node
+      - stretched_cluster_create is succeeded
+    register: site1_stretched_cluster
+    tags:
+      - stretched
+
+  - name: Add Nodes to site2
+    shell: /usr/es/sbin/cluster/utilities/clmgr add site site2 NODES={{SITE2_NODES}}
+    register: site2_stretched_cluster
+    when:
+      - is_current_node
+      - site1_stretched_cluster is succeeded
+    tags:
+      - stretched
+
+  #######################################
+  - name: Collect the Site1 PVID from the Disk WWN number.
+    shell: "lspv -u | grep -i {{SITE1_REPOSITORIES}} | awk '{ print $2}'"
+    register: pvid_from_wwn_site1
+    when:
+      - cluster_exists is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - set_fact:
+      site1_disk_pvid: "{{ pvid_from_wwn_site1.stdout }}"
+    when:
+      - pvid_from_wwn_site1 is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Display message Collected Site1 PVID from the Disk WWN number.
+    debug:
+      msg: "Collected the site1 PVID from the Disk WWN number."
+    when:
+      - pvid_from_wwn_site1 is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Error message Collect the site1 PVID from the Disk WWN number.
+    fail:
+      msg: "Fail to collect the site1 PVID from the Disk WWN number."
+    any_errors_fatal: true
+    when:
+      - pvid_from_wwn_site1 is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  ###########################################
+  - name: Create Linked Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr add cl NODES={{NODES}} TYPE=LC
+    async: 3600
+    poll: 15
+    ignore_errors: true
+    register: linked_cluster_create
+    when: is_current_node
+    tags:
+      - linked
+
+  - name: Cluster creation passed
+    debug:
+      msg: "Cluster creation successful."
+    when:
+      - linked_cluster_create is succeeded
+      - is_current_node
+    tags:
+      - linked
+
+  - name: Cluster creation failed
+    fail:
+      msg: "{{ linked_cluster_create.stderr | regex_findall('ERROR: (.*)') | join('\n') }}"
+    any_errors_fatal: true
+    when:
+      - linked_cluster_create is failed
+      - is_current_node
+    tags:
+      - linked
+
+  - name: Add Nodes to site1
+    shell: /usr/es/sbin/cluster/utilities/clmgr add site site1 NODES={{SITE1_NODES}} REPOSITORIES={{site1_disk_pvid}}
+    ignore_errors: true
+    register: site1_linked_cluster
+    when:
+      - linked_cluster_create is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Add Nodes to site1
+    shell: /usr/es/sbin/cluster/utilities/clmgr add site site1 NODES={{SITE1_NODES}} REPOSITORIES={{SITE1_REPOSITORIES}}
+    ignore_errors: true
+    register: site1_linked_cluster
+    when:
+      - linked_cluster_create is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - linked
+
+  - name: site1 creation failed
+    debug:
+      msg: "{{ site1_linked_cluster.stderr | regex_findall('ERROR: (.*)') | join('\n') }}"
+    when:
+      - site1_linked_cluster is failed
+      - is_current_node
+    tags:
+      - linked
+
+  - name: Delete the Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr rm cl
+    async: 3600
+    poll: 15
+    register: cluster_delete
+    when:
+      - site1_linked_cluster is failed
+      - is_current_node
+    tags:
+      - linked
+
+  - name: Fail on Site1 creation
+    fail:
+      msg: "Cluster creation failed on {{ inventory_hostname }}"
+    any_errors_fatal: true
+    when:
+      - site1_linked_cluster is failed
+      - is_current_node
+    run_once: true
+    tags:
+      - linked
+  #################################
+  - name: Find ansible_ssh_private_key_file path from /hosts file.
+    shell: grep 'ansible_ssh_private_key_file' /hosts |awk -F '=' '{print $2}'|tr -d \' |grep .
+    register: ssh_file_path
+    connection: local
+    ignore_errors: true
+    changed_when: false
+    when:
+      - cluster_exists is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - set_fact:
+      PATH_OF_PEM_KEY: "{{ssh_file_path.stdout}}"
+    when:
+      - ssh_file_path is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Error Fail to get the ansible_ssh_private_key_file path from /hosts file.
+    fail:
+      msg: "Fail to get the ansible_ssh_private_key_file path from /hosts file. Please provide the exact ansible_ssh_private_key_file path in hosts file"
+    when:
+      - ssh_file_path is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    any_errors_fatal: yes
+    tags:
+      - linked
+
+  - name: Collect the Site2 PVID from the Disk WWN number.
+  #  shell: "ssh root@{{NODE_DETAILS[-1].ip}} lspv -u | grep -i {{SITE2_REPOSITORIES}} | awk '{ print $2}'"
+    shell: "ssh -i {{PATH_OF_PEM_KEY}} root@{{NODE_DETAILS[-1].ip}} lspv -u | grep -i {{SITE2_REPOSITORIES}} | awk '{ print $2}'"
+    register: pvid_from_wwn_site2
+    when:
+      - cluster_exists is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - set_fact:
+      site2_disk_pvid: "{{ pvid_from_wwn_site2.stdout }}"
+    when:
+      - pvid_from_wwn_site2 is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Display message Collected Site2 PVID from the Disk WWN number.
+    debug:
+      msg: "Collected the site2 PVID from the Disk WWN number."
+    when:
+      - pvid_from_wwn_site2 is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Error message Collect the site2 PVID from the Disk WWN number.
+    fail:
+      msg: "Fail to collect the site2 PVID from the Disk WWN number."
+    any_errors_fatal: true
+    when:
+      - pvid_from_wwn_site2 is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  ###########################################
+  - name: Add Nodes to site2
+    shell: /usr/es/sbin/cluster/utilities/clmgr add site site2 NODES={{SITE2_NODES}} REPOSITORIES={{site2_disk_pvid}}
+    ignore_errors: true
+    register: site2_linked_cluster
+    when:
+      - site1_linked_cluster is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - linked
+
+  - name: Add Nodes to site2
+    shell: /usr/es/sbin/cluster/utilities/clmgr add site site2 NODES={{SITE2_NODES}} REPOSITORIES={{SITE2_REPOSITORIES}}
+    ignore_errors: true
+    register: site2_linked_cluster
+    when:
+      - site1_linked_cluster is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - linked
+
+  - name: site2 creation failed
+    debug:
+      msg: "{{ site2_linked_cluster.stderr | regex_findall('ERROR: (.*)') | join('\n') }}"
+    when:
+      - site2_linked_cluster is failed
+      - is_current_node
+    tags:
+      - linked
+
+  - name: Delete the Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr rm cl
+    async: 3600
+    poll: 15
+    register: cluster_delete
+    when:
+      - site2_linked_cluster is failed
+      - is_current_node
+    tags:
+      - linked
+
+  - name: Fail on Site2 creation
+    fail:
+      msg: "Cluster creation failed on {{ inventory_hostname }}"
+    any_errors_fatal: true
+    when:
+      - site2_linked_cluster is failed
+      - is_current_node
+    run_once: true
+    tags:
+      - linked
+
+  - name: Verify and Sync
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600
+    poll: 15
+    register: cluster_sync
+    ignore_errors: true
+    when: is_current_node
+    tags:
+      - standard
+      - stretched
+      - linked
+
+  - name: Verify and sync passed
+    debug:
+      msg: "Verify and Sync is successful."
+    when:
+      - cluster_sync is succeeded
+      - is_current_node
+    tags:
+      - standard
+      - stretched
+      - linked
+
+  - name: Verify and sync failed
+    fail:
+      msg: "{{ cluster_sync.stderr | regex_findall('ERROR: (.*)') | join('\n') }}"
+    any_errors_fatal: true
+    when:
+      - cluster_sync is failed
+      - is_current_node
+    tags:
+      - standard
+      - stretched
+      - linked
+  when:
+    - cluster_exists is failed
+
+- block:
+  - name: Display message if cluster already exists
+    debug:
+      msg: "Cluster already exists."
+    when:
+      - cluster_exists is succeeded
+      - is_current_node
+
+
+  - name: Display message if cluster doesn't exist
+    fail:
+      msg: "Cluster doesn't exist."
+    any_errors_fatal: true
+    when:
+      - cluster_exists is failed
+      - is_current_node
+
+  - name: check the cluster services
+    shell: /usr/sbin/clcmd lssrc -ls clstrmgrES | grep state
+    register: cluster_state
+    ignore_errors: true
+    changed_when: false
+    when: is_current_node
+
+  - name: Stop the Cluster Services
+    shell: /usr/es/sbin/cluster/utilities/clmgr stop cl
+    async: 3600
+    poll: 15
+    register: cluster_stop
+    ignore_errors: true
+    when:
+      - is_current_node
+      - "'ST_STABLE' in cluster_state.stdout"
+
+  - name: Display Stop the Cluster Services
+    debug:
+      msg: "Stopped cluster services."
+    when:
+      - is_current_node
+      - cluster_stop is succeeded
+      - "'ST_STABLE' in cluster_state.stdout"
+
+  - name: Delete the Cluster
+    shell: /usr/es/sbin/cluster/utilities/clmgr rm cl
+    async: 3600
+    poll: 15
+    register: cluster_delete
+    ignore_errors: true
+    when: is_current_node
+
+  - name: Cluster deletion passed
+    debug:
+      msg: "Cluster deletion successful."
+    when:
+      - cluster_delete is succeeded
+      - is_current_node
+
+
+  - name: Cluster deletion failed
+    fail:
+      msg: "{{ cluster_delete.stderr }}"
+    any_errors_fatal: true
+    when:
+      - cluster_delete is failed
+      - is_current_node
+
+  when:
+    - cluster_exists is succeeded
+  tags:
+    - delete

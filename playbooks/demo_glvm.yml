@@ -1,0 +1,18 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+- hosts: powerha_remote_servers
+  become: yes
+  vars_files:
+   - /external_var.yml
+
+  roles:
+    - /roles/glvm
+...

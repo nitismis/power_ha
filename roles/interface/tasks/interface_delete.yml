@@ -1,0 +1,82 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for interface
+- name: Check if Interface exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query interface {{ item.NAME }}"
+  register: check_interface
+  when: cluster_exists is succeeded
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - delete
+
+
+# Debug message for Fail (Interface doesn't exist)
+- name: Debug Message for Interface Check (Fail)
+  debug:
+    msg: "Interface {{ item.NAME }} does not exist. Hence Skipping the Interface {{ item.NAME }} deletion."
+  when:
+    - check_interface is failed
+    - is_current_node
+  tags: delete
+
+- block:
+
+  - name: Debug Message for Interface Check (Pass)
+    debug:
+      msg: "As expected Interface {{ item.NAME }} exists."
+    when:
+      - check_interface is succeeded
+      - is_current_node
+
+  - name: Delete Interface
+    shell: "/usr/es/sbin/cluster/utilities/clmgr remove interface {{item.NAME}}"
+    when: is_current_node
+    any_errors_fatal: true
+    register: interface_delete
+
+  - name: Debug - Delete Interface (Fail)
+    fail:
+      msg: "Error: {{ interface_delete.stderr }}"
+    when:
+      - interface_delete is failed
+      - is_current_node
+    any_errors_fatal: true
+
+  - name: Debug - Delete Interface (Pass)
+    debug:
+      msg: "Deleted Interface {{ item.NAME }}"
+    when:
+      - interface_delete is succeeded
+      - is_current_node
+
+  - name: Remove interface mappings to /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      regexp: "{{ item.IP }} {{ item.NAME }}"
+      state: absent
+    register: remove_interface
+
+  - name: Debug - Remove Interface mappings (Pass)
+    debug:
+      msg: "Removing Interface mappings for {{ item.NAME }} from /etc/hosts"
+    when:
+      - check_interface is succeeded
+
+  - name: Debug - Remove Interface mappings (Fail)
+    fail:
+      msg: "Failed to remove Interface mappings for {{ item.NAME }} from /etc/hosts"
+    when:
+      - check_interface is failed
+    any_errors_fatal: true
+
+  when:
+    - check_interface is succeeded
+  tags: delete

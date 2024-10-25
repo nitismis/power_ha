@@ -1,0 +1,310 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for volume_groups
+- name: Check if Volume Group Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volume_group {{item.NAME}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_vg
+  changed_when: false
+  tags:
+    - create
+
+# Display messages for VG existence
+- name: Display message if VG exists
+  debug:
+    msg: "VG {{item.NAME}} already exists. Hence skipping the VG {{item.NAME}} creation."
+  when: check_vg is succeeded and is_current_node
+  tags:
+    - create
+
+- block:
+  - name: Display message if VG doesn't exist
+    debug:
+      msg: "As Expected VG {{item.NAME}} doesn't exist."
+
+  - name: Get hdisk name
+    shell: "/usr/sbin/lspv | grep {{ item.PHYSICAL_VOLUMES }} | awk '{print $1}' "
+    ignore_errors: true
+    register: get_hdisk
+    changed_when: false
+    tags:
+      - create
+
+  - set_fact:
+      hdisk_name: "{{ get_hdisk.stdout }}"
+    ignore_errors: true
+    when:
+      - get_hdisk is succeeded
+    tags:
+      - create
+
+  - name: Display hdisk name
+    debug:
+      msg: "Using {{ hdisk_name }}"
+    when:
+      - get_hdisk is succeeded
+  when: 
+    - is_current_node
+    - check_vg is failed 
+    - Using_for_Cloud_catalog is not defined
+  tags:
+    - create
+
+- name: Display hdisk name
+  debug:
+    msg: "Unable to get the hdisk name for {{ item.PHYSICAL_VOLUMES }} hence skipping the creation of VG {{item.NAME}} "
+  when:
+    - is_current_node
+    - get_hdisk is failed
+    - Using_for_Cloud_catalog is not defined
+  tags:
+    - create
+
+- block:
+  - name: Check if Physical volume is empty
+    shell: /usr/sbin/readvgda {{ hdisk_name }}
+    ignore_errors: true
+    register: check_repo
+    changed_when: false
+
+  - name: Display hdisk empty
+    debug:
+      msg: "Given hdisk or physical volume is empty"
+    when:
+      - check_repo is failed
+
+  - name: Clean disk
+    shell: /usr/sbin/chpv -C {{ hdisk_name }}
+    ignore_errors: true
+    register: clear_repo
+    when:
+      - check_repo is failed
+  when:
+    - is_current_node
+    - check_vg is failed 
+    - get_hdisk is succeeded
+    - Using_for_Cloud_catalog is not defined
+  tags:
+    - create
+
+- name: Physical volume not empty
+  debug:
+    msg: "Physical volume is not empty hence skipping the creation of VG {{item.NAME}}."
+  when:
+    - check_repo is succeeded
+    - is_current_node
+    - Using_for_Cloud_catalog is not defined
+  tags:
+    - create
+
+- block:
+  - name: Create Volume Group with pvid given by user.
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add volume_group {{item.NAME}} NODES={{item.NODES}} PHYSICAL_VOLUMES={{item.PHYSICAL_VOLUMES}} TYPE={{item.TYPE}}"
+    ignore_errors: true
+    register: vg_create
+
+  # Handle VG creation results
+  - name: VG creation failed
+    fail:
+      msg: "{{ vg_create.stderr }}"
+    any_errors_fatal: true
+    when: vg_create is failed and is_current_node
+
+  - name: VG creation passed
+    debug:
+      msg: "VG {{item.NAME}} creation Successful."
+    when: vg_create is succeeded and is_current_node
+
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_create
+    ignore_errors: true
+    when: vg_create is succeeded
+    tags:
+      - create
+
+  # Handle cluster sync (Create)
+  - name: cluster sync failed (Create)
+    fail:
+      msg: "{{ cluster_sync_create.stderr }}"
+    any_errors_fatal: true
+    when: cluster_sync_create is failed
+    tags:
+      - create
+
+  - name: Cluster sync passed (Create)
+    debug:
+      msg: "Cluster synced successfully."
+    when: 
+      - vg_create is succeeded
+      - cluster_sync_create is succeeded
+    tags:
+      - create
+  when:
+    - is_current_node
+    - check_repo is failed
+    - check_vg is failed 
+    - Using_for_Cloud_catalog is not defined
+  tags:
+    - create
+
+######################Collecting PVID from WWN number of the disk##################
+- block:
+  - set_fact:
+      wwn_numbers: "{{ item.PHYSICAL_VOLUMES.split(',')|list}}"
+
+  - name: Collect the PVID from WWN number.
+    shell: "lspv -u | grep -i {{item}} | awk '{ print $2}'"
+    register: pvid
+    with_items: "{{ wwn_numbers }}"
+
+  - set_fact:
+     combined_results: "{{ pvid.results | json_query('[].stdout') }}"
+    when:
+      - pvid is succeeded
+
+  - name: Display message Convert list to string
+    set_fact:
+       final_pvids: "{{ combined_results | join(',') }}"
+    when:
+      - pvid is succeeded
+
+  - name: Display message Collected the PVID from the Disk WWN number.
+    debug:
+      msg: "Successfully Collected the PVID from the Disk WWN number."
+    when:
+      - pvid is succeeded
+  when:
+    - is_current_node
+    - check_vg is failed
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - create
+
+- name: Error message Collect the PVID from the Disk WWN number.
+  debug:
+    msg: "Fail to collect the PVID from the Disk WWN number hence skipping the {{item.NAME}} VG creation."
+  when:
+    - pvid is failed
+    - is_current_node
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - create
+
+#####################################################################################
+
+- block:
+  - name: Create Volume Group
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add volume_group {{item.NAME}} NODES={{item.NODES}} PHYSICAL_VOLUMES={{final_pvids}} TYPE={{item.TYPE}}"
+    ignore_errors: true
+    register: vg_create
+
+  # Handle VG creation results
+  - name: VG creation failed
+    fail:
+      msg: "{{ vg_create.stderr }}"
+    any_errors_fatal: true
+    when: vg_create is failed and is_current_node
+
+  - name: VG creation passed
+    debug:
+      msg: "VG {{item.NAME}} creation Successful."
+    when: vg_create is succeeded and is_current_node
+
+  when:
+    - is_current_node
+    - pvid is succeeded
+    - check_vg is failed
+    - Using_for_Cloud_catalog is defined
+    - Using_for_Cloud_catalog == True
+  tags:
+    - create
+###################################################################################
+
+
+# tasks file for volume_groups
+- name: Check if Volume Group Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volume_group {{item.NAME}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_vg
+  changed_when: false
+  tags:
+    - delete
+
+- name: Display message if VG doesn't exist
+  debug:
+    msg: "VG {{item.NAME}} doesn't exist. Hence skipping the VG {{item.NAME}} deletion part."
+  any_errors_fatal: true
+  when: check_vg is failed and is_current_node
+  tags:
+    - delete
+
+- block:
+  # Display messages for VG existence
+  - name: Display message if VG exists
+    debug:
+      msg: "As expected VG {{item.NAME}} already exists."
+
+  - name: Delete Volume Group
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete volume_group {{item.NAME}} "
+    ignore_errors: true
+    register: vg_delete
+
+  # Handle VG deletion results
+  - name: VG deletion failed
+    fail:
+      msg: "{{ vg_delete.stderr }}"
+    any_errors_fatal: true
+    when: vg_delete is failed
+
+  - name: VG deletion passed
+    debug:
+      msg: "VG {{item.NAME}} deleted successfully."
+    when: vg_delete is succeeded
+
+  # Verify and Sync (Delete)
+  - name: Verify and Sync (Delete)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_delete
+    ignore_errors: true
+    when: vg_delete is succeeded and Using_for_Cloud_catalog is not defined
+
+  # Handle cluster sync (Delete)
+  - name: cluster sync failed (Delete)
+    fail:
+      msg: "{{ cluster_sync_delete.stderr }}"
+    any_errors_fatal: true
+    when:
+      - cluster_sync_delete is failed
+      - is_current_node
+      - Using_for_Cloud_catalog is not defined
+
+  - name: Cluster sync passed (Delete)
+    debug:
+      msg: "Cluster synced successfully."
+    when:
+      - cluster_sync_delete is succeeded
+      - is_current_node
+      - Using_for_Cloud_catalog is not defined
+
+  when:
+    - is_current_node
+    - check_vg is succeeded
+  tags:
+    - delete

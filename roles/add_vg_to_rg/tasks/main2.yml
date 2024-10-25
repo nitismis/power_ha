@@ -1,0 +1,68 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# Check if RG exists
+- name: Check if RG exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}}"
+  register: check_rg
+  ignore_errors: true
+  when: is_current_node
+  changed_when: false
+
+- name: Error message if RG doesn't exist
+  debug:
+    msg: "RG {{item.RG_NAME}} doesn't exist. Hence skipping the VG adding to RG."
+  when: check_rg is failed and is_current_node
+
+- name: Check if Volume Group Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volume_group {{item.VG_NAMES}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_vg
+  changed_when: false
+
+- name: Error message if VG does not exists.
+  debug:
+    msg: "VG {{item.VG_NAMES}} doesn't exist. Hence skipping the VG adding to RG."
+  when: check_vg is failed and is_current_node
+
+- block:
+  # Display messages for VG existence
+  - name: Display message if VG exists
+    debug:
+      msg: "As expected VG {{item.VG_NAMES}} exists."
+    when: check_vg is succeeded and is_current_node
+
+  - name: Display message if RG exists
+    debug:
+      msg: "As Expected RG {{item.RG_NAME}} exist."
+    when: is_current_node and check_rg is succeeded
+
+  # ADD Volume group to Resource Group
+  - name: ADD Volume group to Resource Group
+    shell: "/usr/es/sbin/cluster/utilities/clmgr modify resource_group  {{item.RG_NAME}} VOLUME_GROUP={{item.VG_NAMES}} "
+    when: is_current_node
+    ignore_errors: true
+    register: add_vg_rg
+
+  - name: Display message VG add to RG
+    debug:
+      msg: "VG {{item.VG_NAMES}} added to RG {{item.RG_NAME}} Successfully."
+    when: add_vg_rg is succeeded and is_current_node
+
+  - name: Error message VG add to RG
+    fail:
+      msg: "Unable to add VG {{item.VG_NAMES}} to RG {{item.RG_NAME}}."
+    any_errors_fatal: true
+    when: add_vg_rg is failed and is_current_node
+
+  when:
+    - is_current_node
+    - check_rg is succeeded
+    - check_vg is succeeded

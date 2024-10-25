@@ -1,0 +1,52 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+- name: Check if Network exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query network {{item.NAME}} "
+  when: is_current_node
+  ignore_errors: true
+  register: network_check
+  changed_when: false
+
+# Debug message for Fail (Network doesn't exist)
+- name: Debug Message for Network Check (Fail)
+  debug:
+    msg: "Network {{ item.NAME }} does not exist. Hence skipping the network deletion for {{ item.NAME }}."
+  when:
+    - network_check is failed
+    - is_current_node
+
+- block:
+  - name: Debug Message for Network Check (Pass)
+    debug:
+      msg: "Network {{ item.NAME }} exists."
+
+  - name: Delete Network
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete network {{item.NAME}}"
+    ignore_errors: true
+    register: network_delete
+
+  # Debug message for Pass (Network Deletion Success)
+  - name: Debug Message for Network Deletion (Pass)
+    debug:
+      msg: "Network {{ item.NAME }} deleted successfully."
+    when:
+      - network_delete is succeeded
+
+  # Debug message for Fail (Network Deletion Error)
+  - name: Debug Message for Network Deletion (Fail)
+    fail:
+      msg: "{{ network_delete.results | map(attribute='stderr') | list | join('\n') }}"
+    when:
+      - network_delete is failed
+    any_errors_fatal: true
+
+  when: 
+    - is_current_node
+    - network_check is succeeded

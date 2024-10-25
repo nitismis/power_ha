@@ -1,0 +1,125 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+# tasks file for cluster_health
+
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags: always
+
+# Check if cluster exists
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+  ignore_errors: true
+  register: cluster_exists
+  changed_when: false
+  tags:
+    - always
+
+# Display messages for cluster existence
+- name: Display message if cluster exists
+  debug:
+    msg: "Cluster already exists."
+  when: cluster_exists is succeeded
+  tags:
+    - always
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist."
+  when: cluster_exists is failed
+  any_errors_fatal: yes
+  tags:
+    - always
+
+- name: Run lssrc command and grep for state
+  shell: "lssrc -ls clstrmgrES | grep state | awk -F ': ' '{print $2}'"
+  register: cluster_state_output_initial
+  when: cluster_exists is succeeded
+  changed_when: false
+  tags:
+    - always
+
+- name: Display the Cluster State
+  when: cluster_exists is succeeded and cluster_state_output_initial is succeeded
+  debug:
+    var: cluster_state_output_initial.stdout_lines
+  tags:
+    - always
+
+- name: Display If Cluster State is stable.
+  when: "cluster_state_output_initial is succeeded and 'ST_STABLE' in cluster_state_output_initial.stdout_lines and cluster_exists is succeeded"
+  debug:
+    msg: "Cluster state is stable on {{ansible_hostname}} Node."
+  tags:
+    - always
+
+- name: Cluster is not stable --Error
+  fail:
+    msg: "Cluster state is not stable on {{ansible_hostname}} and the state is {{cluster_state_output_initial.stdout_lines}}."
+  when: "cluster_state_output_initial is succeeded and 'ST_STABLE' not in cluster_state_output_initial.stdout_lines"
+  any_errors_fatal: yes
+  tags:
+    - always
+
+- name: Check ResourceGroup Present or Not.
+  shell: /usr/es/sbin/cluster/utilities/clmgr q rg
+  when: is_current_node
+  register: check_rg
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - always
+
+- name: set ResourceGroups.
+  set_fact:
+    RG_available: "{{check_rg.stdout_lines}}"
+  when: check_rg is succeeded and is_current_node
+  tags:
+    - always
+
+- name: Display message If the ResourceGroup {{RG_available}} are Present.
+  debug:
+    msg: "Available ResourceGroup are {{RG_available}}."
+  when: is_current_node and (RG_available|length > 0)
+  tags:
+    - always
+
+- name: Check the ResourceGroup state.
+  shell: /usr/es/sbin/cluster/utilities/clRGinfo -c | awk -F ":" '{print $1 ":" $2 ":" $3}'
+  when: is_current_node and (RG_available|length > 0)
+  register: check_rg_info
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - always
+
+- name: Display message If the ResourceGroup are Present.
+  debug:
+    msg: "ResourceGroups state is {{check_rg_info.stdout_lines}}."
+  when: is_current_node and (RG_available|length > 0)
+  tags:
+    - always 
+
+- name: Display message If the ResourceGroup are not Present.
+  debug:
+    msg: "No ResourceGroup are Available."
+  when: is_current_node and (RG_available|length == 0)
+  tags:
+    - always
+ 
+- name: Check the ResourceGroups are online or not.
+  include_tasks: main2.yml
+  loop: "{{RG_available}}"
+  when: is_current_node and (RG_available|length > 0)
+  tags:
+    - always
+...

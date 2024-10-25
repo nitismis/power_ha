@@ -1,0 +1,599 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+- name: Check state transition from ST_BARRIER to ST_STABLE
+  shell: "clcmd lssrc -ls clstrmgrES | grep state"
+  register: state_output
+  when: is_current_node
+  ignore_errors: true
+  until: "'Current state: ST_INIT' in state_output.stdout"
+  tags:
+    - create
+    - delete
+
+- name: Debug message when cluster is in INIT state
+  debug: 
+    msg: "Cluster is in INIT state"
+  when: state_output is succeeded and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Debug message when cluster is in INIT state
+  debug: 
+    msg: "Cluster not in INIT."
+  when: state_output is failed and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Stop cluster services 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr stop cluster"
+  when: state_output is failed and is_current_node  
+  async: 100     # Maximum allowed time in Seconds
+  poll: 10       # Polling Interval in Seconds
+  register: stop_cl
+  ignore_errors: true
+  tags:
+    - create
+    - delete
+
+- name: Debug message when cluster is in INIT state
+  fail: 
+    msg: "Unable to stop the cluster services."
+  any_errors_fatal: true
+  when: stop_cl is failed and state_output is failed and is_current_node
+  tags:
+    - create
+    - delete
+
+- name: Check if RG exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}}"
+  when: is_current_node
+  register: check_Wpar
+  ignore_errors: true
+  tags: create
+
+# Display messages for RG existence
+- name: Display message if RG exists
+  debug:
+    msg: "RG {{item.RG_NAME}} already exists."
+  when: check_Wpar is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Display message if RG doesn't exist
+  fail:
+    msg: "RG {{item.RG_NAME}} for WPAR doesn't exist. Please add a RG using playbook or manually"
+  any_errors_fatal: true
+  when: check_Wpar is failed and is_current_node
+  tags:
+    - create
+
+- name: Check if given WPAR is added to RG
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}} | grep -i WPAR_NAME | grep -i {{item.RG_NAME}}"
+  ignore_errors: true
+  register: check_wpar_rg
+  tags: create
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} is not added to the RG."
+  when: check_wpar_rg is failed
+  tags: create
+
+- name: Message 
+  fail: 
+    msg: "The given WPAR is added to the RG {{item.RG_NAME}} . WPAR {{item.RG_NAME}} already added to the node. Please remove the entry from /etc/ansible/external_var.yml."
+  any_errors_fatal: true
+  when: check_wpar_rg is succeeded
+  tags: create
+
+- name: Check if given WPAR already exists
+  shell: /usr/sbin/lswpar {{item.RG_NAME}}
+  ignore_errors: true
+  register: check_wpar
+  tags: create
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} doesn't exist."
+  when: check_wpar is failed
+  tags: create
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} already exists. Removing it."
+  when: check_wpar is succeeded
+  tags: create
+
+- name: Remove WPAR if it already exists
+  shell: "/usr/sbin/rmwpar {{item.RG_NAME}}"
+  when: check_wpar is succeeded
+  ignore_errors: true
+  register: remove_wpar
+  tags: create
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} removed successfully."
+  when: check_wpar is succeeded and remove_wpar is succeeded
+  tags: create
+
+- name: Message 
+  fail: 
+    msg: "Unable to remove already exisiting WPAR {{item.RG_NAME}}. Please remove manually and try again."
+  any_errors_fatal: true
+  when: check_wpar is succeeded and remove_wpar is failed
+  tags: create
+
+- name: Check if WPAR service IP exists 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query service_ip {{item.WPAR_SERVICE_IP}}"
+  when: is_current_node
+  register: check_Wpar_service
+  ignore_errors: true
+  tags: create
+
+# Display messages for WPAR service IP
+- name: Display message if WPAR service IP exists
+  debug:
+    msg: "WPAR service IP {{item.WPAR_SERVICE_IP}} already exists."
+  when: is_current_node and check_Wpar_service is succeeded
+  tags:
+    - create
+
+- name: Display message if WPAR service IP doesn't exist
+  fail:
+    msg: "WPAR service IP {{item.WPAR_SERVICE_IP}} doesn't exist. Plese add the service IP using playbook or manually."
+  any_errors_fatal: true
+  when: check_Wpar_service is failed and is_current_node
+  tags:
+    - create
+
+- name: Check if WPAR APP exists 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query application {{item.APP_NAME}}"
+  when: is_current_node
+  register: check_Wpar_app
+  ignore_errors: true
+  tags: create
+
+# Display messages for WPAR APP
+- name: Display message if WPAR APP exists
+  debug:
+    msg: "WPAR APP {{item.APP_NAME}} already exists."
+  when: is_current_node and check_Wpar_app is succeeded
+  tags:
+    - create
+
+- name: Display message if WPAR APP doesn't exist
+  fail:
+    msg: "WPAR APP {{item.APP_NAME}} doesn't exist. Plese add the APP using playbook or manually."
+  any_errors_fatal: true
+  when: check_Wpar_app is failed and is_current_node
+  tags:
+    - create
+
+- name: Check if WPAR VG exists 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query vg {{item.VG_NAME}}"
+  when: is_current_node
+  register: check_Wpar_VG
+  ignore_errors: true
+  tags: create
+
+# Display messages for WPAR VG
+- name: Display message if WPAR VG exists
+  debug:
+    msg: "WPAR VG {{item.VG_NAME}} already exists."
+  when: is_current_node and check_Wpar_VG is succeeded
+  tags:
+    - create
+
+- name: Display message if WPAR VG doesn't exist
+  fail:
+    msg: "WPAR VG {{item.VG_NAME}} doesn't exist. Plese add the VG using playbook or manually."
+  any_errors_fatal: true
+  when: check_Wpar_VG is failed and is_current_node
+  tags:
+    - create
+
+- name: Check if WPAR FS exists 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query fs {{item.FS_NAME}}"
+  when: is_current_node
+  register: check_Wpar_FS
+  ignore_errors: true
+  tags: create
+
+# Display messages for WPAR FS
+- name: Display message if WPAR FS exists
+  debug:
+    msg: "WPAR FS {{item.FS_NAME}} already exists."
+  when: is_current_node and check_Wpar_FS is succeeded
+  tags:
+    - create
+
+- name: Display message if WPAR FS doesn't exist
+  fail:
+    msg: "WPAR FS {{item.FS_NAME}} doesn't exist. Plese add the FS using playbook or manually."
+  any_errors_fatal: true
+  when: check_Wpar_FS is failed and is_current_node
+  tags:
+    - create
+
+- name: Check if WPAR service ip is added to the RG
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}} | grep -i {{item.WPAR_SERVICE_IP}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_service
+  tags: create
+
+- name: Display message if WPAR service IP is not added to the RG
+  debug:
+    msg: "WPAR service IP {{item.WPAR_SERVICE_IP}} is not added to the RG {{item.RG_NAME}}. Adding it. "
+  when: is_current_node and check_service is failed
+  tags:
+    - create
+
+- name: Display message if WPAR service IP is not added to the RG
+  debug:
+    msg: "WPAR service IP {{item.WPAR_SERVICE_IP}} is already added to the RG {{item.RG_NAME}}. "
+  when: is_current_node and check_service is succeeded
+  tags:
+    - create
+
+- name: Add WPAR Service IP to RG when not already present
+  shell: "/usr/es/sbin/cluster/utilities/clmgr modify resource_group {{item.RG_NAME}} SERVICE_LABEL={{item.WPAR_SERVICE_IP}}"
+  when: is_current_node and check_service is failed
+  ignore_errors: true
+  register: add_service
+  tags: create
+
+# Display messages for Adding wpar service IP to RG
+- name: Display message if Adding wpar service IP to RG is passed
+  debug:
+    msg: "Service Ip {{item.WPAR_SERVICE_IP}} added to the WPAR RG {{item.RG_NAME}} is succeeded."
+  when: is_current_node and check_service is failed and add_service is succeeded
+  tags:
+    - create
+
+# Display messages for Adding wpar service IP to RG
+- name: Display message if Adding wpar service IP to RG is failed
+  fail:
+    msg: "{{ add_service.stderr }}"
+  any_errors_fatal: true
+  when: is_current_node and check_service is failed and add_service is failed
+  tags:
+    - create
+
+- name: Add WPAR to RG
+  shell: "/usr/es/sbin/cluster/utilities/clmgr modify resource_group {{item.RG_NAME}} WPAR_NAME={{item.RG_NAME}} APPLICATIONS={{item.APP_NAME}} VOLUME_GROUP={{item.VG_NAME}} FILESYSTEM={{item.FS_NAME}}"
+  when: is_current_node
+  register: Add_Wpar
+  ignore_errors: true
+  tags: create
+
+# Display messages for Adding wpar to RG
+- name: Display message if Adding wpar to RG is failed
+  fail:
+    msg: "{{ Add_Wpar.stderr }}"
+  any_errors_fatal: true
+  when: is_current_node and Add_Wpar is failed
+  tags:
+    - create
+
+# Display messages for Adding wpar to RG
+- name: Display message if Adding wpar to RG is succeeded
+  debug:
+    msg: "Adding WPAR to the RG is successful. Performing verify and sync might take some time."
+  when: is_current_node and Add_Wpar is succeeded
+  tags:
+    - create
+
+# Verify and Sync (Create)
+- name: Verify and Sync (Create)
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15        # Polling Interval in Seconds
+  register: cluster_sync_create
+  ignore_errors: true
+  when: is_current_node
+  tags:
+    - create
+
+# Handle cluster sync(Create)
+- name: cluster sync failed (Create)
+  fail:
+    msg: "{{ cluster_sync_create.stderr }}"
+  any_errors_fatal: true
+  when: cluster_sync_create is failed and is_current_node
+  tags:
+    - create
+
+- name: Cluster sync passed (Create)
+  debug:
+    msg: "Cluster synced successfully."
+  when: cluster_sync_create is succeeded and is_current_node
+  tags:
+    - create
+ 
+- name: Verifying and creating wpar 
+  debug:
+    msg: "Starting wpar verification and creation..."
+  when: is_current_node
+  tags:
+    - create
+
+- name: Verify wpar directory created or not
+  shell: cd /wpars/{{item.RG_NAME}}
+  when: is_current_node
+  register: verify_wpar
+  ignore_errors: true
+  tags: create
+
+- name: Message
+  debug: 
+    msg: "Wpar {{item.RG_NAME}} directory created successfully"
+  when: verify_wpar is succeeded and is_current_node
+  tags: create
+
+- name: Message
+  fail: 
+    msg: "Wpar {{item.RG_NAME}} directory not created. "
+  any_errors_fatal: true
+  when: verify_wpar is failed and is_current_node
+  tags: create
+
+- name: Start WPAR 
+  shell: startwpar {{item.RG_NAME}}
+  register: start_wpar
+  ignore_errors: true
+  tags: create
+
+- name: Message
+  debug: 
+    msg: "Wpar {{item.RG_NAME}} started successfully"
+  when: start_wpar is succeeded
+  tags: create
+
+- name: Message
+  fail: 
+    msg: "{{ start_wpar.stderr }} "
+  any_errors_fatal: true
+  when: start_wpar is failed
+  tags: create
+
+- name: Check if application scripts are present
+  shell: ls -lrt {{ item.APP_SCRIPTS_PATH }} 
+  register: app_scripts
+  ignore_errors: true
+  tags: create
+
+- name: Message
+  debug: 
+    msg: "Application scripts are present at the path {{ item.APP_SCRIPTS_PATH }}"
+  when: app_scripts is succeeded
+  tags: create
+  
+- name: Message
+  fail: 
+    msg: "Application scripts are not present at the path {{ item.APP_SCRIPTS_PATH }} "
+  any_errors_fatal: true
+  when: app_scripts is failed
+  tags: create
+
+- name: Copy application to wpar directory
+  shell: cp -R {{item.APP_SCRIPTS_PATH}} /wpars/{{item.RG_NAME}}{{item.APP_SCRIPTS_PATH}}
+  register: copy_scripts
+  tags: create
+
+- name: Stop WPAR
+  shell: stopwpar {{item.RG_NAME}}
+  register: stop_wpar
+  ignore_errors: true
+  tags: create
+
+- name: Message
+  debug: 
+    msg: "Wpar stopped successfully"
+  when: stop_wpar is succeeded
+  tags: create
+
+- name: Message
+  fail: 
+    msg: "{{ stop_wpar.stderr}} "
+  any_errors_fatal: true
+  when: stop_wpar is failed
+  tags: create
+
+- name: Check if given WPAR exists
+  shell: /usr/sbin/lswpar {{item.RG_NAME}}
+  ignore_errors: true
+  register: check_wpar
+  tags: delete
+
+- name: message
+  debug:
+    msg: "The given WPAR {{item.RG_NAME}} is found. Trying to remove..."
+  when: check_wpar is succeeded
+  tags: delete
+
+- name: message
+  debug:
+    msg: "WPAR {{item.RG_NAME}} not found. "
+  when: check_wpar is failed
+  tags: delete
+
+- name: Check if WPAR is added to RG
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.RG_NAME}} | grep -i WPAR_NAME | grep -i {{item.RG_NAME}}"
+  when: is_current_node
+  register: check_Wpar
+  ignore_errors: true
+  tags: delete
+
+# Display messages for RG existence
+- name: Display message if WPAR is added to RG
+  debug:
+    msg: "RG exists."
+  when: is_current_node and check_Wpar is succeeded
+  tags:
+    - delete
+
+- name: Display message if WPAR is not added to RG
+  debug:
+    msg: "WPAR is not added to the RG"
+  when: is_current_node and check_Wpar is failed
+  tags:
+    - delete
+
+- name: Remove WPAR from RG
+  shell: "/usr/es/sbin/cluster/utilities/clmgr modify resource_group {{item.RG_NAME}} WPAR_NAME='' SERVICE_LABEL='' "  
+  when: is_current_node and check_Wpar is succeeded
+  register: remove_Wpar_rg
+  ignore_errors: true
+  tags: delete 
+
+- name: message
+  debug:
+    msg: "The given WPAR {{item.RG_NAME}} was removed from RG."
+  when: remove_Wpar_rg is succeeded and check_Wpar is succeeded and is_current_node
+  tags: delete
+
+- name: message
+  fail:
+    msg: "{{ remove_Wpar_rg.stderr }}"
+  any_errors_fatal: true
+  when: remove_Wpar_rg is failed and check_Wpar is succeeded and is_current_node
+  tags: delete
+
+- name: Check if given WPAR already exists
+  shell: /usr/sbin/lswpar {{item.RG_NAME}}
+  ignore_errors: true
+  register: check_wpar
+  tags: delete
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} doesn't exist."
+  when: check_wpar is failed
+  tags: delete
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} already exists. Removing it."
+  when: check_wpar is succeeded
+  tags: delete
+
+- name: Remove WPAR if it already exists
+  shell: "/usr/sbin/rmwpar {{item.RG_NAME}}"
+  when: check_wpar is succeeded
+  ignore_errors: true
+  register: remove_wpar
+  tags: delete
+
+- name: Message 
+  debug: 
+    msg: "The given wpar {{item.RG_NAME}} removed successfully."
+  when: check_wpar is succeeded and remove_wpar is succeeded
+  tags: delete
+
+- name: Message 
+  debug: 
+    msg: "Unable to remove already exisiting WPAR {{item.RG_NAME}}. Please remove manually and try again."
+  when: check_wpar is succeeded and remove_wpar is failed
+  tags: delete
+
+- name: Verify and Sync
+  shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+  when: is_current_node
+  ignore_errors: true
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15       # Polling Interval in Seconds
+  register: cluster_sync
+  tags: delete 
+
+# Handle cluster sync (Delete)
+- name: cluster sync failed (Delete)
+  when: is_current_node and cluster_sync is failed
+  fail:
+    msg: "{{ cluster_sync.stderr }}"
+  any_errors_fatal: true
+  tags:
+    - delete
+
+- name: Cluster sync passed (Delete)
+  when: is_current_node and cluster_sync is successful
+  debug:
+    msg: "Cluster synced successfully."
+  tags:
+    - delete
+
+- name: Start cluster services 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr start cluster"
+  when: is_current_node
+  async: 3600     # Maximum allowed time in Seconds
+  poll: 15       # Polling Interval in Seconds
+  ignore_errors: true
+  register: start_cl
+  tags:
+    - create
+
+- name: Wait for 2 minutes
+  pause:
+    minutes: 2
+  when: start_cl is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Check state transition from ST_BARRIER to ST_STABLE
+  shell: "clcmd lssrc -ls clstrmgrES | grep state"
+  register: state_output
+  when: start_cl is succeeded and is_current_node
+  retries: 10
+  delay: 30
+  ignore_errors: true
+  until: "'Current state: ST_STABLE' in state_output.stdout"
+  tags:
+    - create
+
+- name: Debug message when cluster is in stable state
+  debug: 
+    msg: "Cluster is in a stable state"
+  when: state_output is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Debug message when cluster is in stable state
+  fail: 
+    msg: "Cluster not in stable state after multiple tries."
+  any_errors_fatal: true
+  when: state_output is failed and is_current_node
+  tags:
+    - create
+
+- name: Stop cluster services 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr stop cluster"
+  when: is_current_node
+  register: stop_cl
+  ignore_errors: true
+  tags:
+    - create
+
+- name: Debug message when cluster is in stable state
+  debug: 
+    msg: "Cluster services stopped successfully."
+  when: stop_cl is succeeded and is_current_node
+  tags:
+    - create
+
+- name: Debug message when cluster is in stable state
+  fail: 
+    msg: "Unable to stop the cluster services. Check manually"
+  any_errors_fatal: true
+  when: stop_cl is failed and is_current_node
+  tags:
+    - create

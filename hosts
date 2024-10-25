@@ -1,0 +1,14 @@
+# NOTE: Please do not change the name of the variable
+################ START ########################
+[powerha_remote_servers]
+x.x.x.x
+x.x.x.x
+.
+.
+x.x.x.x
+
+[powerha_remote_servers:vars]
+ansible_user='user-name'
+ansible_python_interpreter='/path/to/python'
+ansible_ssh_private_key_file='/path/to/.pem Key'
+############### END ###########################

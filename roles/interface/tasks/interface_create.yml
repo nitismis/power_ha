@@ -1,0 +1,91 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for interface
+- name: Check if Interface exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query interface {{ item.NAME }}"
+  register: check_interface
+  when: cluster_exists is succeeded
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - create
+
+- name: Error Message for Interface Check
+  debug:
+    msg: "Interface {{ item.NAME }} already exists. Hence skipping the Interface {{ item.NAME }} creation"
+  when:
+    - check_interface is succeeded
+    - is_current_node
+  tags: create
+
+- block:
+
+  - name: Debug Message for Interface Check
+    debug:
+      msg: "As Expected Interface {{ item.NAME }} does not exist."
+    when:
+      - is_current_node
+
+  - name: Add Interface mappings to /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ item.IP }} {{ item.NAME }}"
+      create: yes
+    register: add_interface
+    ignore_errors: true
+
+  # Debug message for "pass" case
+  - name: Debug - Add Interface mappings succeeded
+    debug:
+      msg: "Interface mappings added successfully to /etc/hosts"
+    when:
+      - add_interface is succeeded
+
+  # Debug message for "fail" case
+  - name: Debug - Add Interface mappings failed
+    fail:
+      msg: "Failed to add Interface mappings to /etc/hosts"
+    any_errors_fatal: true
+    when:
+      - add_interface is failed
+
+  - name: refreshing nodes
+    shell: stopsrc -s clcomd; sleep 10; startsrc -s clcomd
+    register: output_refresh
+    when:
+      - add_interface is changed
+
+  - name: Create Interface
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add interface {{ item.NAME }} NETWORK={{ item.NETWORK }} NODE={{ item.NODE }} INTERFACE={{ item.INTERFACE }}"
+    register: interface_create
+    any_errors_fatal: true
+    when:
+      - is_current_node
+
+  # Debug message for Pass (Success)
+  - name: Debug Message for Interface Creation (Pass)
+    debug:
+      msg: "Interface {{ item.NAME }} created successfully."
+    when:
+      - interface_create is succeeded
+      - is_current_node
+
+  # Debug message for Fail (Error)
+  - name: Debug Message for Interface Creation (Fail)
+    fail:
+      msg: "{{ interface_create.stderr }}"
+    when:
+      - interface_create is failed
+      - is_current_node
+    any_errors_fatal: true
+
+  when:
+    - check_interface is failed
+  tags: create

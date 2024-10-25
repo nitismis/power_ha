@@ -1,0 +1,226 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for resource_group
+
+# Define variable for repeated condition
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags:
+    - create
+    - delete
+
+- block:
+  # Check if cluster exists
+  - name: Check if cluster exists
+    shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+    when: is_current_node
+    ignore_errors: true
+    register: cluster_exists
+    changed_when: false
+    tags:
+      - create
+      - delete
+
+  # Display messages for cluster existence
+  - name: Display message if cluster exists
+    debug:
+      msg: "Cluster already exists."
+    when: cluster_exists is succeeded and is_current_node
+    tags:
+      - create
+      - delete
+
+  - name: Display message if cluster doesn't exist
+    fail:
+      msg: "Cluster doesn't exist."
+    any_errors_fatal: true
+    when: cluster_exists is failed and is_current_node
+    tags:
+      - create
+      - delete
+
+  - name: get the Cluster type
+    shell: "/usr/es/sbin/cluster/utilities/cltopinfo | grep -i 'Cluster Type' | cut -d ':' -f 2 | tr -d ' \t'"
+    register: cluster_type
+    when: is_current_node
+    changed_when: false
+    ignore_errors: true
+    tags:
+      - create
+
+  - name: Getting the value of cluster type
+    set_fact:
+      cl_type: "{{cluster_type.stdout}}"
+    any_errors_fatal: true
+    when: is_current_node
+    tags:
+      - create
+
+  ######### Validation ##################
+
+  # Find python path from /hosts file.
+  - name: Find python path from /hosts file.
+    shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \'
+    register: python
+    connection: local
+    ignore_errors: true
+    changed_when: false
+    when: is_current_node
+    tags:
+      - always
+
+  - set_fact:
+      python_path: "{{python.stdout}}"
+    when: python is succeeded and is_current_node
+    tags:
+      - always
+
+  - name: Error Fail to get the python path from /hosts file.
+    fail:
+      msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+    when: python is failed and is_current_node
+    any_errors_fatal: yes
+    tags:
+      - always
+
+  - name: Validating input information for standard cluster
+    ansible.builtin.raw: "{{python_path}} /plugins/modules/RG_plugin.py 'create' 'standard' "
+    connection: local
+    when: 
+       - is_current_node
+       - cl_type == 'Standard'
+    register: output
+    any_errors_fatal: yes
+    tags:
+      - create
+
+  - name: Validating input information for stretched and linked cluster
+    ansible.builtin.raw: "{{python_path}} /plugins/modules/RG_plugin.py 'create' 'site' "
+    connection: local
+    when: 
+      - is_current_node
+      - cl_type != 'Standard'
+    register: output
+    any_errors_fatal: yes
+    changed_when: false
+    tags:
+      - create
+
+  - name: Validating input information for delete
+    ansible.builtin.raw: "{{python_path}} /plugins/modules/RG_plugin.py 'delete' 'NA' "
+    connection: local
+    when: is_current_node
+    register: output
+    any_errors_fatal: yes
+    changed_when: false
+    tags:
+      - delete
+
+  ######################################
+
+  - name: Check RG data.
+    include_tasks: main2.yml
+    loop: "{{ RGNAMES }}"
+    when: cluster_exists is succeeded
+    tags:
+      - create
+      - delete
+
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_create
+    when: 
+      - is_current_node 
+      - Using_for_Cloud_catalog is not defined  
+    ignore_errors: true
+    tags:
+      - create
+
+  # Handle cluster sync results (Create)
+  - name: cluster sync failed (Create)
+    fail:
+      msg: "{{ cluster_sync_create.stderr }}"
+    when: 
+      - is_current_node 
+      - Using_for_Cloud_catalog is not defined 
+      - cluster_sync_create is failed
+    tags:
+      - create
+
+  - name: Cluster sync passed (Create)
+    debug:
+      msg: "Cluster synced successfully."
+    when: 
+      - is_current_node 
+      - Using_for_Cloud_catalog is not defined 
+      - cluster_sync_create is succeeded
+    tags:
+      - create
+
+  # Verify and Sync (Delete)
+  - name: Verify and Sync (Delete)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_delete
+    when: 
+      - is_current_node 
+      - Using_for_Cloud_catalog is not defined 
+    ignore_errors: true
+    tags:
+      - delete
+
+  # Handle cluster sync results (Delete)
+  - name: cluster sync failed (Delete)
+    fail:
+      msg: "{{ cluster_sync_delete.stderr }}"
+    when: 
+      - is_current_node 
+      - Using_for_Cloud_catalog is not defined 
+      - cluster_sync_delete is failed
+    tags:
+      - delete
+
+  - name: Cluster sync passed (Delete)
+    debug:
+      msg: "Cluster synced successfully."
+    when: 
+      - is_current_node 
+      - Using_for_Cloud_catalog is not defined 
+      - cluster_sync_delete is succeeded
+    tags:
+      - delete
+
+  when: RGNAMES is defined
+
+- name: Display message if RGNAMES details are not defined.
+  debug:
+    msg: "Define the RGNAMES details in /external_var.yml file and run again."
+  when: 
+    - RGNAMES is not defined
+    - Using_for_Cloud_catalog is defined
+    - is_current_node
+  tags:
+    - always
+
+- name: Error message if RGNAMES details are not defined.
+  fail:
+    msg: "Define the RGNAMES details in /external_var.yml file and run again."
+  any_errors_fatal: yes
+  when: 
+    - RGNAMES is not defined
+    - Using_for_Cloud_catalog is not defined
+    - is_current_node
+  tags:
+    - always

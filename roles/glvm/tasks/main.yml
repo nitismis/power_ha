@@ -1,0 +1,220 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+
+# Check if GLVM file set's already installed or not.
+- name: Check GLVM file set's on nodes.
+  shell: lslpp -l |grep -i glvm  
+  ignore_errors: true
+  register: glvm_files
+  changed_when: false
+  tags:
+    - create
+    - delete
+
+# Display messages As Expected GLVM file set's already installed. 
+- name: Display message As Expected GLVM file set's already installed.
+  debug:
+    msg: "As Expected GLVM file set's already installed on {{ansible_hostname}} node."
+  when: glvm_files is succeeded
+  tags:
+    - create
+    - delete
+
+- name: Error GLVM file set's are not installed.
+  fail:
+    msg: "GLVM file set's are not installed on {{ansible_hostname}} node. So please install the GLVM file sets on {{ansible_hostname}} node and try again"
+  any_errors_fatal: true
+  when: glvm_files is failed
+  tags:
+    - create
+    - delete
+
+# Define variable for repeated condition
+- name: Set site1 node condition
+  set_fact:
+    is_site1_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags:
+    - always
+
+# Define variable for repeated condition
+- name: Set site2 node condition
+  set_fact:
+    is_site2_node: "{{ inventory_hostname == NODE_DETAILS[-1].ip }}"
+  tags:
+    - always
+
+######### Inputs Validation ##################
+# Find python path from /hosts file.
+- name: Find python path from /hosts file.
+  shell: grep 'python' /hosts |awk -F '=' '{print $2}'|tr -d \' |grep .
+  register: python
+  connection: local
+  ignore_errors: true
+  changed_when: false
+  when: is_site1_node
+  tags:
+    - always
+
+- set_fact:
+    python_path: "{{python.stdout}}"
+  when: python is succeeded and is_site1_node
+  tags:
+    - always
+
+- name: Error Fail to get the python path from /hosts file.
+  fail:
+    msg: "Fail to get the python path from /hosts file. Please provide the exact python path in hosts file"
+  when: python is failed and is_site1_node
+  any_errors_fatal: yes
+  tags:
+    - always
+
+- name: Validating GLVM SYNC input information for creation
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/GLVM_plugin.py 'create_sync' "
+  connection: local
+  ignore_errors: true
+  when: is_site1_node
+  register: output
+  tags:
+    - sync
+
+- name: Validating GLVM ASYNC input information for creation
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/GLVM_plugin.py 'create_async' "
+  connection: local
+  ignore_errors: true
+  when: is_site1_node
+  register: output
+  tags:
+    - async
+
+- name: Validating GLVM input information for deletion
+  ansible.builtin.raw: "{{python_path}} /plugins/modules/GLVM_plugin.py 'delete' "
+  connection: local
+  ignore_errors: true
+  when: is_site1_node
+  register: output
+  tags:
+    - delete
+
+- name: Successfully validated the GLVM user Input
+  debug:
+    msg: "Input GLVM information validated successfully."
+  when: is_site1_node and output.rc == 0
+  tags:
+    - create
+    - delete
+
+- name: Failed output
+  fail:
+    msg: "{{output.stdout}}"
+  when: is_site1_node and output.rc != 0
+  any_errors_fatal: true
+  tags:
+    - create
+    - delete
+
+- include_vars:
+    file: /external_var.yml
+  tags:
+    - create
+    - delete
+######################################
+- name: get the Cluster type
+  shell: "/usr/es/sbin/cluster/utilities/cltopinfo | grep -i 'Cluster Type' | cut -d ':' -f 2 | tr -d ' \t'"
+  register: cluster_type
+  when: is_site1_node
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - create
+    - delete
+
+- name: Getting the value of cluster type
+  set_fact:
+    cl_type: "{{cluster_type.stdout}}"
+  any_errors_fatal: true
+  when: is_site1_node
+  tags:
+    - create
+    - delete
+
+# Display messages for cluster existence
+- name: Display message if linked cluster exists
+  debug:
+    msg: "As expected Linked Cluster already exists."
+  when:
+    - is_site1_node
+    - cl_type == 'Linked'
+  tags:
+    - create
+    - delete
+
+- name: Error message if Linked cluster doesn't exist
+  fail:
+    msg: "GLVM configuration required the Linked cluster. So Please create Linked cluster and try again"
+  any_errors_fatal: true
+  when:
+    - is_site1_node
+    - cl_type != 'Linked'
+  tags:
+    - create
+    - delete
+
+- name: Check cluster state
+  shell: "lssrc -ls clstrmgrES | egrep -w 'state|NODE' "
+  register: cluster_state_output_initial
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - create
+    - delete
+
+- name: Display Current state of Cluster on {{ansible_hostname}} Node.
+  debug:
+    var: cluster_state_output_initial.stdout_lines
+  tags:
+    - create
+    - delete
+
+- name: Display message Cluster state is as Expected on {{ansible_hostname}} Node.
+  debug:
+    msg: "Cluster state is as Expected on {{ansible_hostname}} Node and the state is {{cluster_state_output_initial.stdout}}"
+  when: 
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags:
+    - create
+    - delete
+
+- name: ERROR Cluster state is not as expected {{ansible_hostname}} Node.
+  fail:
+    msg: "Cluster state should be in ST_INIT but current state is not as Expected on {{ansible_hostname}} Node and the state is {{cluster_state_output_initial.stdout}}"
+  when: 
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  any_errors_fatal: yes
+  tags:
+    - create
+    - delete
+
+- name: Creation Part for GLVM
+  include_tasks: glvm_create.yml
+  loop: "{{ GLVM }}"
+  when: 
+    - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags:
+    - create
+
+- name: Deletion Part for GLVM
+  include_tasks: glvm_delete.yml
+  loop: "{{ GLVM }}"
+  when: 
+    - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags:
+    - delete

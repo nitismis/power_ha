@@ -1,0 +1,67 @@
+######### Validation ##################
+- name: Storing input information
+  set_fact:
+    MAP_HOSTS_NAMES:
+      - ip: "{{ ip }}"
+        full_name: "{{ full_name }}"
+        name: "{{ name }}"
+
+- name: Validating input information
+  command: python3 /.ansible/collections/ansible_collections/ibm/power_ha/plugins/MAPHOSTS_plugin.py "{{ MAP_HOSTS_NAMES }}"
+  connection: local
+  ignore_errors: true
+  register: output
+
+- name: Passed output
+  debug:
+    msg: "Input information validated successfully."
+  when: (output.rc == 0)
+
+- name: Failed output
+  fail:
+    msg: "{{output.stdout}}"
+  when: (output.rc != 0)
+  any_errors_fatal: true
+
+- include_vars:
+    file: /etc/ansible/external_var.yml 
+
+######################################
+
+- name: Add mappings to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.ip }} {{ item.full_name }} {{ item.name }}"
+    create: yes 
+  with_items:
+    "{{NODE_DETAILS}}"
+  register: add_hosts
+
+- name: message 
+  debug: 
+    msg: "Added host data to /etc/hosts"
+  when: add_hosts is changed
+    
+- name: Updating hosts in /etc/cluster/rhosts file
+  lineinfile:
+    path: /etc/cluster/rhosts
+    line: "{{ item.ip }}"
+    create: yes
+  with_items:
+     "{{NODE_DETAILS}}"
+  register: map_ip
+  
+- name: message 
+  debug: 
+    msg: "Added host data to /etc/cluster/rhosts"
+  when: map_ip is changed
+  
+- name: refreshing nodes
+  shell: refresh -s clcomd
+  register: output_refresh
+  when: add_hosts is changed or map_ip is changed
+
+- name: message 
+  debug: 
+    msg: "Nodes refreshed"
+  when: add_hosts is changed or map_ip is changed

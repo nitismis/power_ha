@@ -1,0 +1,152 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+- name: Check ResourceGroup {{item.RG_NAME}} Present or Not.
+  shell: /usr/es/sbin/cluster/utilities/clmgr q rg {{item.RG_NAME}}
+  when: is_current_node
+  register: check_rg
+  ignore_errors: true
+  changed_when: false
+
+- name: ResourceGroup {{item.RG_NAME}} is Not Present. - Error Message
+  debug:
+    msg: "Error: ResourceGroup {{item.RG_NAME}} is Not Present. Hence skipping the RG move."
+  when: check_rg is failed and is_current_node
+
+- block:
+  - name: Display message If the ResourceGroup {{item.RG_NAME}} is Present.
+    debug:
+      msg: "ResourceGroup {{item.RG_NAME}} is Present."
+
+  - name: Check ResourceGroup {{item.RG_NAME}} Current Node
+    shell: /usr/es/sbin/cluster/utilities/clmgr q rg {{item.RG_NAME}} | grep -w CURRENT_NODE | awk -F '=' '{print $2}'
+    register: RG_Current_node
+    when: check_rg is succeeded and is_current_node
+    ignore_errors: true
+    changed_when: false
+
+  - name: Check ResourceGroup {{item.RG_NAME}} Current State
+    shell: /usr/es/sbin/cluster/utilities/clmgr q rg {{item.RG_NAME}} | grep -w STATE | awk -F '=' '{print $2}' | head -1
+    register: RG_Current_state
+    when: check_rg is succeeded and is_current_node
+    changed_when: false
+    ignore_errors: true
+
+  - name: Set the ResourceGroup {{item.RG_NAME}} Exact status
+    set_fact:
+      RG_node: "{{RG_Current_node.stdout}}"
+      RG_State: "{{RG_Current_state.stdout}}"
+    when: RG_Current_node is succeeded and RG_Current_state is succeeded and is_current_node
+    changed_when: false
+
+  - name: Display message ResourceGroup {{item.RG_NAME}} Current Data.
+    debug:
+      msg: "RG state is {{RG_State}} on {{RG_node}}"
+    when: RG_Current_node is succeeded and RG_Current_state is succeeded and is_current_node
+
+  - name: Display message ResourceGroup {{item.RG_NAME}} Data is As Expected.
+    debug:
+      msg: " AS Expected ResourceGroup is {{RG_State}} on {{RG_node}}."
+    when: RG_Current_node is succeeded and RG_Current_state is succeeded and is_current_node and RG_Current_node.stdout | regex_search(item.FROM) and RG_Current_state.stdout | regex_search('ONLINE')
+
+  - name: ResourceGroup Data {{item.RG_NAME}} is not As Expected . - Error Message
+    fail:
+      msg: "Error: As per the user input ResourceGroup {{item.RG_NAME}} Should be move from {{item.FROM}} Node to {{item.TO}} Node. But Already RG {{item.RG_NAME}} {{RG_State}} on {{RG_node}} node."
+    any_errors_fatal: yes
+    when: RG_Current_node is succeeded and RG_Current_state is succeeded and is_current_node and not RG_Current_node.stdout | regex_search(item.FROM) and not RG_Current_node.stdout | regex_search('ONLINE')
+
+  - block:
+    - name: ResourceGroup {{item.RG_NAME}} data is As Expected so we can move the RG.
+      debug:
+        msg: ResourceGroup {{item.RG_NAME}} data is as expected, Hence Move RG from {{item.FROM}} to {{item.TO}} Respective Node.
+
+    - name: Move RG to Respective Node.
+      shell: "/usr/es/sbin/cluster/utilities/clmgr move rg {{item.RG_NAME}} node={{item.TO}}"
+      register: RG_move
+
+    - name: Display message ResourceGroup {{item.RG_NAME}} Moved successfully.
+      debug:
+        msg: "ResourceGroup {{item.RG_NAME}} Moved successfully from {{item.FROM}} to {{item.TO}}."
+      when: RG_move is succeeded
+
+    - name: ResourceGroup {{item.RG_NAME}} Move is Failed. - Error Message
+      fail:
+        msg: "Error: ResourceGroup is failed with {{RG_move}}."
+      any_errors_fatal: yes
+      when: RG_move is failed
+
+    when: RG_Current_node is succeeded and RG_Current_state is succeeded and is_current_node and RG_Current_node.stdout | regex_search(item.FROM) and RG_Current_state.stdout | regex_search('ONLINE')
+
+  - name: Run lssrc command and grep for state
+    shell: "lssrc -ls clstrmgrES | grep state | awk -F ': ' '{print $2}'"
+    register: cluster_state_output_final
+    until: "'ST_STABLE' in cluster_state_output_final.stdout_lines"
+    retries: 10
+    delay: 30
+    changed_when: false
+    when: RG_move is succeeded
+
+  - name: Display the Cluster State Post ResourceGroup {{item.RG_NAME}} Move
+    when: RG_move is succeeded and cluster_state_output_final is succeeded
+    debug:
+      var: cluster_state_output_final.stdout_lines
+
+  - name: Display If Cluster State is stable post ResourceGroup {{item.RG_NAME}} move.
+    when: "cluster_state_output_final is succeeded and 'ST_STABLE' in cluster_state_output_final.stdout_lines"
+    debug:
+      msg: "Cluster state is stable on {{ansible_hostname}} Node."
+
+  - name: Cluster is not stable post ResourceGroup {{item.RG_NAME}} move --Error
+    fail:
+      msg: "Cluster state is not stable on {{ansible_hostname}} and the state is {{cluster_state_output_initial.stdout_lines}} post ResourceGroup move."
+    when: "cluster_state_output_final is succeeded and 'ST_STABLE' not in cluster_state_output_final.stdout_lines"
+    any_errors_fatal: yes
+
+  - name: Check ResourceGroup {{item.RG_NAME}} Node post move RG
+    shell: /usr/es/sbin/cluster/utilities/clmgr q rg {{item.RG_NAME}} | grep -w CURRENT_NODE | awk -F '=' '{print $2}'
+    register: post_move_RG_node
+    when: "is_current_node and cluster_state_output_final is succeeded and 'ST_STABLE' in cluster_state_output_final.stdout_lines"
+    ignore_errors: true
+    changed_when: false
+
+  - name: Check ResourceGroup {{item.RG_NAME}} State post move RG
+    shell: /usr/es/sbin/cluster/utilities/clmgr q rg {{item.RG_NAME}} | grep -w STATE | awk -F '=' '{print $2}' | head -1
+    register: post_move_RG_state
+    when: "is_current_node and cluster_state_output_final is succeeded and 'ST_STABLE' in cluster_state_output_final.stdout_lines"
+    until: "'ONLINE' in post_move_RG_state.stdout"
+    retries: 10
+    delay: 30
+    ignore_errors: true
+    changed_when: false
+
+  - name: ResourceGroup {{item.RG_NAME}} state post move
+    set_fact:
+      RG_node_post_move: "{{post_move_RG_node.stdout}}"
+      RG_State_post_move: "{{post_move_RG_state.stdout}}"
+    when: post_move_RG_node is succeeded and post_move_RG_state is succeeded and is_current_node
+    changed_when: false
+
+  - name: Display message ResourceGroup {{item.RG_NAME}} Current Data post Move RG.
+    debug:
+      msg: "Post move ResourceGroup {{item.RG_NAME}} the RG state is {{RG_State_post_move}} on {{RG_node_post_move}}"
+    when: post_move_RG_node is succeeded and post_move_RG_state is succeeded and is_current_node
+
+  - name: Display message ResourceGroup {{item.RG_NAME}} Data is As Expected post RG move.
+    debug:
+      msg: " AS Expected ResourceGroup {{item.RG_NAME}} is {{RG_State_post_move}} on {{RG_node_post_move}} post RG move"
+    when: post_move_RG_node is succeeded and post_move_RG_state is succeeded and is_current_node and post_move_RG_node.stdout | regex_search(item.TO) and post_move_RG_state.stdout | regex_search('ONLINE')
+
+  - name: ResourceGroup {{item.RG_NAME}} Data is not As Expected post RG move . - Error Message
+    fail:
+      msg: "Error: As per the user input ResourceGroup Should be move from {{item.FROM}} Node to {{item.TO}} Node. But Already RG {{RG_State}} on {{RG_node}} node."
+    any_errors_fatal: yes
+    when: post_move_RG_node is succeeded and post_move_RG_state is succeeded and is_current_node and not post_move_RG_node.stdout | regex_search(item.TO) and not post_move_RG_state.stdout | regex_search('ONLINE')
+
+  when: check_rg is succeeded and is_current_node

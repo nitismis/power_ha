@@ -1,0 +1,35 @@
+{
+ "collection_info": {
+  "namespace": "ibm",
+  "name": "power_ha",
+  "version": "1.0.0",
+  "authors": [
+   "Jes Kiran Chittigala <jechitti@in.ibm.com>"
+  ],
+  "readme": "README.md",
+  "tags": [
+   "infrastructure",
+   "ibm",
+   "power",
+   "powerha"
+  ],
+  "description": "Ansible Content for Power HA.",
+  "license": [
+   "GPL-3.0-only"
+  ],
+  "license_file": null,
+  "dependencies": {},
+  "repository": "https://github.com/IBM/ansible-power-ha",
+  "documentation": null,
+  "homepage": "https://github.com/IBM",
+  "issues": "https://github.com/IBM/ansible-power-ha/issues"
+ },
+ "file_manifest_file": {
+  "name": "FILES.json",
+  "ftype": "file",
+  "chksum_type": "sha256",
+  "chksum_sha256": "3b08bdd4141c2ef572cfe74c4302a73b296814b78876a1c0d534bf60dc5a7a79",
+  "format": 1
+ },
+ "format": 1
+}

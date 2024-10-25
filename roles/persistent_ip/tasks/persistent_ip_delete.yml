@@ -1,0 +1,82 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for persistent_ip
+- name: Check if persistent_ip exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query persistent_ip {{ item.NAME }}"
+  register: check_persistent_ip
+  when: cluster_exists is succeeded
+  ignore_errors: true
+  changed_when: false
+  tags:
+    - delete
+
+
+# Debug message for Fail (persistent_ip doesn't exist)
+- name: Debug Message for persistent_ip Check (Fail)
+  debug:
+    msg: "persistent_ip {{ item.NAME }} does not exist. Hence Skipping the persistent_ip {{ item.NAME }} deletion."
+  when:
+    - check_persistent_ip is failed
+    - is_current_node
+  tags: delete
+
+- block:
+
+  - name: Debug Message for persistent_ip Check (Pass)
+    debug:
+      msg: "As expected persistent_ip {{ item.NAME }} exists."
+    when:
+      - check_persistent_ip is succeeded
+      - is_current_node
+
+  - name: Delete persistent_ip
+    shell: "/usr/es/sbin/cluster/utilities/clmgr remove persistent_ip {{item.NAME}}"
+    when: is_current_node
+    any_errors_fatal: true
+    register: persistent_ip_delete
+
+  - name: Debug - Delete persistent_ip (Fail)
+    fail:
+      msg: "Error: {{ persistent_ip_delete.stderr }}"
+    when:
+      - persistent_ip_delete is failed
+      - is_current_node
+    any_errors_fatal: true
+
+  - name: Debug - Delete persistent_ip (Pass)
+    debug:
+      msg: "Deleted persistent_ip {{ item.NAME }}"
+    when:
+      - persistent_ip_delete is succeeded
+      - is_current_node
+
+  - name: Remove persistent_ip mappings to /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      regexp: "{{ item.IP }} {{ item.NAME }}"
+      state: absent
+    register: remove_persistent_ip
+
+  - name: Debug - Remove persistent_ip mappings (Pass)
+    debug:
+      msg: "Removing persistent_ip mappings for {{ item.NAME }} from /etc/hosts"
+    when:
+      - check_persistent_ip is succeeded
+
+  - name: Debug - Remove persistent_ip mappings (Fail)
+    fail:
+      msg: "Failed to remove persistent_ip mappings for {{ item.NAME }} from /etc/hosts"
+    when:
+      - check_persistent_ip is failed
+    any_errors_fatal: true
+
+  when:
+    - check_persistent_ip is succeeded
+  tags: delete

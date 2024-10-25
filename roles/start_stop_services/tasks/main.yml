@@ -1,0 +1,262 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+- name: Set current node condition
+  set_fact:
+    is_current_node: "{{ inventory_hostname == NODE_DETAILS[0].ip }}"
+  tags: 
+    - start
+    - stop
+
+# Check if cluster exists
+- name: Check if cluster exists
+  shell: /usr/es/sbin/cluster/utilities/clmgr query cluster 
+  changed_when: false
+  ignore_errors: true
+  register: cluster_exists
+  when: is_current_node
+  tags: 
+    - start
+    - stop
+
+# Display messages for cluster existence
+- name: Display message if cluster exists
+  debug:
+    msg: "Cluster already exists."
+  when: cluster_exists is succeeded and is_current_node
+  tags: 
+    - start
+    - stop
+
+- name: Display message if cluster doesn't exist
+  fail:
+    msg: "Cluster doesn't exist."
+  any_errors_fatal: true
+  when: cluster_exists is failed and is_current_node
+  tags: 
+    - start
+    - stop
+
+- name: Check cluster state for start
+  shell: "lssrc -ls clstrmgrES | egrep -w 'state|NODE' "
+  register: cluster_state_output_initial
+#  when: is_current_node
+  ignore_errors: true
+  changed_when: false
+  tags: 
+    - start
+
+- name: Display Initial Cluster State
+  debug:
+    var: cluster_state_output_initial.stdout_lines
+#  when: is_current_node
+  tags: 
+    - start
+
+- name: message
+  debug:
+    msg: "Cluster services are already in Stable state on {{ansible_hostname}}"
+  when: 
+#   - is_current_node
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  tags: start
+
+- name: Starting cluster services
+  debug:
+    msg: "Cluster not in Stable state on {{ansible_hostname}}. Starting cluster services"
+  when: 
+#   - is_current_node
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags: start
+
+- name: Start Cluster if ST_INIT
+  shell: "/usr/es/sbin/cluster/utilities/clmgr online node {{ansible_hostname}}"
+  async: 300  # 5 minutes (300 seconds)
+  poll: 10    
+  ignore_errors: true
+  when: 
+#   - is_current_node
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  register: start_cluster_result
+  tags: start
+
+- name: message
+  debug:
+    msg: "Cluster services started on {{ansible_hostname}}"
+  when: 
+#   - is_current_node
+   - start_cluster_result is succeeded 
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags: start
+
+- name: message
+  fail:
+    msg: "Starting cluster services failed on {{ansible_hostname}}, please check manually."
+  when: 
+#   - is_current_node
+   - start_cluster_result is failed
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  any_errors_fatal: true
+  tags: start
+
+- name: Check cluster state for stop
+  shell: "clcmd lssrc -ls clstrmgrES | egrep -w 'state|NODE' "
+  register: cluster_state_output_initial
+  when: is_current_node
+  ignore_errors: true
+  changed_when: false
+  tags: 
+    - stop
+
+- name: Display Initial Cluster State
+  debug:
+    var: cluster_state_output_initial.stdout_lines
+  when: is_current_node
+  tags: 
+    - stop
+
+- name: message
+  debug:
+    msg: "Cluster services are already in OFFLINE state"
+  when: 
+   - is_current_node
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags: stop
+
+- name: Stopping cluster services
+  debug:
+    msg: "Cluster not in INIT state. Stopping cluster services"
+  when: 
+   - is_current_node
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  tags: stop
+
+- name: Stop Cluster if ST_STABLE
+  shell: "/usr/es/sbin/cluster/utilities/clmgr stop cl"
+  async: 300  # 5 minutes (300 seconds)
+  poll: 10     
+  when: 
+   - is_current_node
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  register: stop_cluster_result
+  tags: stop
+
+- name: message 
+  debug:
+    msg: "Cluster services stopped."
+  when: 
+   - is_current_node
+   - stop_cluster_result is succeeded 
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  tags: stop
+
+- name: message 
+  fail:
+    msg: "Unable to stop the cluster services."
+  when: 
+   - is_current_node
+   - stop_cluster_result is failed
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  any_errors_fatal: true
+  tags: stop
+
+- name: Check cluster state
+  shell: "clcmd lssrc -ls clstrmgrES | egrep -w 'state|NODE'"
+  register: cluster_state_output_start
+  until: "'ST_STABLE' in cluster_state_output_start.stdout"
+  retries: 10
+  delay: 30
+  changed_when: false
+  ignore_errors: true
+  when: 
+   - is_current_node
+   - start_cluster_result is succeeded 
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  tags: start
+
+- name: Check cluster state
+  shell: "clcmd lssrc -ls clstrmgrES | egrep -w 'state|NODE'"
+  register: cluster_state_output_stop
+  until: "'ST_INIT' in cluster_state_output_stop.stdout"
+  retries: 10
+  delay: 30
+  changed_when: false
+  ignore_errors: true
+  when: 
+   - is_current_node
+   - stop_cluster_result is succeeded 
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  tags: stop
+
+- name: Display Cluster State After Start
+  when: 
+   - start_cluster_result is succeeded 
+   - is_current_node
+   - cluster_state_output_start is succeeded
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout"
+  debug:
+    var: cluster_state_output_start.stdout_lines
+  tags:
+    - start
+
+- name: Display Cluster State After Start
+  when: 
+   - start_cluster_result is succeeded 
+   - is_current_node
+   - cluster_state_output_start is succeeded
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout" 
+  debug:
+    msg: "Cluster is in stable state after starting the services"
+  tags:
+    - start
+
+- name:  Cluster Not in Stable State
+  debug:
+    msg: "Cluster is not in a stable state after the retry period.\n {{cluster_state_output_start.stdout_lines}}"
+  when: 
+   - start_cluster_result is succeeded 
+   - is_current_node
+   - not cluster_state_output_start is succeeded 
+   - "'ST_STABLE' not in cluster_state_output_initial.stdout" 
+  tags:
+    - start
+
+- name: Display Cluster State After Stop
+  when: 
+   - is_current_node
+   - stop_cluster_result is succeeded
+   - cluster_state_output_stop is succeeded 
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  debug:
+    var: cluster_state_output_stop.stdout_lines
+  tags:
+    - stop
+
+- name: Display Cluster State After Stop
+  when: 
+   - is_current_node
+   - stop_cluster_result is succeeded
+   - cluster_state_output_stop is succeeded 
+   - "'ST_STABLE' in cluster_state_output_initial.stdout"
+  debug:
+    msg: "Cluster is in INIT state after stopping the services "
+  tags:
+    - stop
+
+- name:  Cluster Not in INIT State
+  debug:
+    msg: "Cluster is not in INIT state after the retry period.\n {{cluster_state_output_start.stdout_lines}}"
+  when: 
+   - is_current_node
+   - stop_cluster_result is succeeded 
+   - not cluster_state_output_stop is succeeded 
+   - "'ST_STABLE' in cluster_state_output_initial.stdout_lines"
+  tags:
+    - stop

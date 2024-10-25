@@ -1,0 +1,365 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+
+- name: Check if Application exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query application_controller {{item[0].NAME}}"
+  when: cluster_exists is succeeded
+  ignore_errors: true
+  register: check_app
+  changed_when: false
+  tags:
+    - create
+    - delete
+# Display messages for Application existence
+- name: Debug message if Application already exists
+  debug:
+    msg: "Application_controller {{item[0].NAME}} already found on the node. Hence skipping"
+  when: cluster_exists is succeeded and check_app is succeeded
+  tags:
+    - create
+
+- name: Check if Application monitor exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query application_monitor {{item[1].NAME}}"
+  when: cluster_exists is succeeded
+  ignore_errors: true
+  register: check_app_mon
+  changed_when: false
+  tags:
+    - create
+    - delete
+
+# Display messages for Application existence
+- name: Debug message if Application monitor already exists
+  debug:
+    msg: "Application Monitor {{item[1].NAME}} already found on the node. Hence skipping."
+  when: cluster_exists is succeeded and check_app_mon is succeeded
+  tags:
+    - create
+
+- block:
+  - name: Display message if Application Controller doesn't exist
+    debug:
+      msg: "As Expected application_controller {{item[0].NAME}} doesn't exist."
+    when: cluster_exists is succeeded and check_app is failed
+    tags:
+      - create
+  - name: Display message if Application monitor doesn't exist
+    debug:
+      msg: "As Expected application_monitor  doesn't exist."
+    when: cluster_exists is succeeded and check_app_mon is failed
+    tags:
+      - create
+
+  - name: Check if start script is present
+    shell: ls -lrt {{ item[0].PATH }} | grep -i {{ item[0].STARTSCRIPT }}
+    register: start_script_result
+    ignore_errors: true
+    when: cluster_exists is succeeded and check_app is failed
+    changed_when: false
+    tags: create
+
+  # Start script not found - Error Message
+  - name: Start script not found - Error Message
+    debug:
+      msg: "Error: Start script {{ item[0].STARTSCRIPT }} not found in {{ item[0].PATH }} directory"
+    when: start_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Start script not found - Error Message
+  - name: Start script not found - Error Message
+    fail:
+      msg: "Error: Start script {{ item[0].STARTSCRIPT }} not found in {{ item[0].PATH }} directory."
+    any_errors_fatal: yes
+    when: start_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Start script found
+  - name: Start script found
+    debug:
+      msg: "Start script {{ item[0].STARTSCRIPT }} is present in {{ item[0].PATH }} directory."
+    when: start_script_result is succeeded and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  - name: Check if stop script is present
+    shell: ls -lrt {{ item[0].PATH }} | grep -i {{ item[0].STOPSCRIPT }}
+    register: stop_script_result
+    ignore_errors: true
+    when: cluster_exists is succeeded and check_app is failed
+    changed_when: false
+    tags: create
+
+  # Start script not found - Error Message
+  - name: Start script not found - Error Message
+    debug:
+      msg: "Error: Start script {{ item[0].STARTSCRIPT }} not found in {{ item[0].PATH }} directory."
+    when: start_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Start script not found - Error Message
+  - name: Start script not found - Error Message
+    fail:
+      msg: "Error: Start script {{ item[0].STARTSCRIPT }} not found in {{ item[0].PATH }} directory."
+    any_errors_fatal: yes
+    when: start_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Start script found
+  - name: Start script found
+    debug:
+      msg: "Start script {{ item[0].STARTSCRIPT }} is present in {{ item[0].PATH }} directory."
+    when: start_script_result is succeeded and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  - name: Check if monitor method is present
+    shell: ls -lrt {{ item[1].PATH }} | grep -i {{ item[1].MONITORMETHOD }}
+    register: monitor_method_result
+    ignore_errors: true
+    when: cluster_exists is succeeded and check_app is failed
+    changed_when: false
+    tags: create
+
+  # Start script not found - Error Message
+  - name: Start script not found - Error Message
+    debug:
+      msg: "Error: Start script {{ item[0].STARTSCRIPT }} not found in {{ item[0].PATH }} directory - {{start_script_result.stderr}}."
+    when: start_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Start script not found - Error Message
+  - name: Start script not found - Error Message
+    fail:
+      msg: "Error: Start script {{ item[0].STARTSCRIPT }} not found in {{ item[0].PATH }} directory."
+    any_errors_fatal: yes
+    when: start_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Start script found
+  - name: Start script found
+    debug:
+      msg: "Start script {{ item[0].STARTSCRIPT }} is present in {{ item[0].PATH }} directory."
+    when: start_script_result is succeeded and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Stop script not found - Error Message
+  - name: Stop script not found - Error Message
+    debug:
+      msg: "Error: Stop script {{ item[0].STOPSCRIPT }} not found in {{ item[0].PATH }} directory."
+    when: stop_script_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Stop script not found - Error Message
+  - name: Stop script not found - Error Message
+    fail:
+      msg: "Error: Stop script {{ item[0].STOPSCRIPT }} not found in {{ item[0].PATH }} directory."
+    when: stop_script_result is failed and cluster_exists is succeeded and check_app is failed
+    any_errors_fatal: yes
+    tags: create
+
+  # Stop script found
+  - name: Stop script found
+    debug:
+      msg: "Stop script {{ item[0].STOPSCRIPT }} is present in {{ item[0].PATH }} directory."
+    when: stop_script_result is succeeded and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Monitor method not found - Error Message
+  - name: Monitor method not found - Error Message
+    debug:
+      msg: "Error: Monitor method {{ item[1].MONITORMETHOD }} not found in {{ item[1].PATH }} directory."
+    when: monitor_method_result is failed and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  # Monitor method not found - Error Message
+  - name: Monitor method not found - Error Message
+    fail:
+      msg: "Error: Monitor method {{ item[1].MONITORMETHOD }} not found in {{ item[1].PATH }} directory."
+    when: monitor_method_result is failed and cluster_exists is succeeded and check_app is failed
+    any_errors_fatal: yes
+    tags: create
+
+  # Monitor method found
+  - name: Monitor method found
+    debug:
+      msg: "Monitor method {{ item[1].MONITORMETHOD }} is present in {{ item[1].PATH }} directory."
+    when: monitor_method_result is succeeded and cluster_exists is succeeded and check_app is failed
+    tags: create
+
+  - name: "Create Application Controllers"
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add application_controller {{ item[0].NAME }} STARTSCRIPT={{ item[0].PATH }}/{{ item[0].STARTSCRIPT }} STOPSCRIPT={{ item[0].PATH }}/{{ item[0].STOPSCRIPT }}"
+    when: cluster_exists is succeeded and check_app is failed and is_current_node and start_script_result is succeeded and stop_script_result is succeeded
+    ignore_errors: true
+    register: app_create
+    tags: create
+
+  - name: Application Controller creation failed
+    debug:
+      var: "{{ app_create.stderr | map(attribute='stderr') | list | join('\n') }}"
+    when: cluster_exists is succeeded and app_create is failed and is_current_node and check_app is failed
+    tags:
+      - create
+
+  - name: Application Controller creation passed
+    debug:
+      msg: "Application Controller Monitor {{ item[0].NAME }} creation Successful."
+    when: cluster_exists is succeeded and app_create is succeeded and is_current_node and check_app is failed
+    tags:
+      - create
+
+  - name: Create Application Monitors
+    shell: "/usr/es/sbin/cluster/utilities/clmgr add application_monitor {{ item[1].NAME }} APPLICATIONS={{ item[1].APPLICATIONS }} MONITORMETHOD={{ item[1].PATH }}/{{ item[1].MONITORMETHOD }} FAILUREACTION={{ item[1].FAILUREACTION }} TYPE={{ item[1].TYPE }}"
+    when: cluster_exists is succeeded and check_app is failed and app_create is succeeded and monitor_method_result is succeeded and is_current_node
+    ignore_errors: true
+    register: app_mon_create
+    tags: create
+
+  - name: Debug failed application monitors
+    debug:
+      var: "{{ app_mon_create.stderr | map(attribute='stderr') | list | join('\n') }}"
+    when: cluster_exists is succeeded and app_mon_create is failed and is_current_node and check_app is failed
+    tags: create
+
+  - name: Application Monitor creation passed
+    debug:
+      msg: "Application Monitor {{ item[1].NAME }} Monitor creation Successful."
+    when: cluster_exists is succeeded and app_mon_create is succeeded and is_current_node and check_app is failed
+    tags:
+      - create
+
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_create
+    when: cluster_exists is succeeded and app_mon_create is succeeded and is_current_node and check_app is failed
+    tags:
+      - create
+
+  # Handle cluster sync results (Create)
+  - name: cluster sync failed (Create)
+    debug:
+      msg: "{{ cluster_sync_create.stderr }}"
+    when: cluster_sync_create is failed and is_current_node and app_mon_create is succeeded  and check_app is failed and cluster_exists is succeeded
+    tags:
+      - create
+
+  - name: Cluster sync passed (Create)
+    debug:
+      msg: "Cluster synced successfully."
+    when: cluster_sync_create is succeeded and is_current_node and app_mon_create is succeeded and check_app is failed and cluster_exists is succeeded
+    tags:
+      - create
+  when:
+    - cluster_exists is succeeded
+    - check_app is failed
+    - check_app_mon is failed
+  tags:
+    - create
+
+- name: Debug message if Application doesn't exist
+  debug:
+    msg: "Application_controller {{item[0].NAME}} doesn't exist. Hence Skipping."
+  when: cluster_exists is succeeded and check_app is failed
+  tags:
+    - delete
+
+- name: Debug message if Application doesn't exist
+  debug:
+    msg: "Application monitor {{item[1].NAME}} doesn't exist. Hence Skipping."
+  when: cluster_exists is succeeded and check_app is failed
+  tags:
+    - delete
+
+- block:
+  # Display messages for Application existence
+  - name: Display message if Application already exists
+    debug:
+      msg: "As Expected Application_controller {{item[0].NAME}} already exists."
+    when: cluster_exists is succeeded and check_app is succeeded
+    tags:
+      - delete
+
+  # Display messages for Application existence
+  - name: Display message if Application already exists
+    debug:
+      msg: "As Expected Application Monitor {{item[1].NAME}} already exists."
+    when: cluster_exists is succeeded and check_app_mon is succeeded
+    tags:
+      - delete
+
+  - name: "Delete Application Monitors"
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete application_monitor {{ item[1].NAME }}"
+    register: app_mon_delete
+    ignore_errors: true
+    when: check_app is succeeded and is_current_node and cluster_exists is succeeded
+    tags: delete
+
+  - name: Application Monitors Deletion Result
+    debug:
+      msg: "Application Monitor {{ item[1].NAME }} deleted successfully."
+    when: app_mon_delete is succeeded and is_current_node and cluster_exists is succeeded and check_app is succeeded
+    tags: delete
+
+  - name: Application Monitors Deletion Failed
+    debug:
+      msg: "Failed to delete Application Monitor {{ item[1].NAME }}."
+    when: app_mon_delete is failed and is_current_node and cluster_exists is succeeded and check_app is succeeded
+    tags: delete
+
+  # Delete Application Controllers
+  - name: "Delete Application Controllers"
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete application_controller {{ item[0].NAME }}"
+    when: check_app is succeeded and is_current_node and cluster_exists is succeeded
+    ignore_errors: true
+    register: app_delete
+    tags: delete
+
+  - name: Application Controllers Deletion Result
+    debug:
+      msg: "Application Controller {{ item[0].NAME }} deleted successfully."
+    when: app_delete is succeeded and is_current_node and cluster_exists is succeeded and check_app is succeeded
+    tags: delete
+
+  - name: Application Controllers Deletion Failed
+    debug:
+      msg: "Failed to delete Application Controller {{ item[0].NAME }}."
+    when: app_delete is failed and is_current_node and cluster_exists is succeeded and check_app is succeeded
+    tags: delete
+
+  # Verify and Sync (Delete)
+  - name: Verify and Sync (Delete)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_delete
+    when: cluster_exists is succeeded and app_delete is succeeded and is_current_node and check_app is succeeded
+    tags:
+      - delete
+
+  # Handle cluster sync results (Delete)
+  - name: cluster sync failed (Delete)
+    debug:
+      msg: "{{ cluster_sync_delete.stderr }}"
+    when: cluster_sync_delete is failed and is_current_node and app_delete is succeeded and check_app is succeeded and cluster_exists is succeeded
+    tags:
+      - delete
+
+  - name: Cluster sync passed (Delete)
+    debug:
+      msg: "Cluster synced successfully."
+    when: cluster_sync_delete is succeeded and is_current_node and app_delete is succeeded and check_app is succeeded and cluster_exists is succeeded
+    tags:
+      - delete
+  when:
+    - cluster_exists is succeeded
+    - check_app is succeeded
+    - check_app_mon is succeeded
+  tags:
+    - delete

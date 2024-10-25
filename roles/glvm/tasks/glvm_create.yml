@@ -1,0 +1,647 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+
+# tasks file for volume_groups
+- name: Check if Volume Group Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volume_group {{item.GLVM_name}}"
+  ignore_errors: true
+  register: check_vg
+  changed_when: false
+  tags:
+    - create
+
+# Display messages for VG existence
+- name: Display message if VG exists
+  debug:
+    msg: "VG {{item.GLVM_name}} already exists on {{ansible_hostname}} node. Hence Skipping the GLVM creation."
+  when: check_vg is succeeded
+  tags:
+    - create
+
+- block:
+  - name: Display message if VG doesn't exist
+    debug:
+      msg: "As Expected VG {{item.GLVM_name}} doesn't exist on {{ansible_hostname}} node."
+    when: check_vg is failed
+    tags:
+      - create
+
+  ######################Collecting PVID from WWN number of the disk from SITE1##################
+
+  - set_fact:
+      wwn_numbers: "{{ item.Site1_Disk.split(',')|list}}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Collect the PVID from WWN number from Site1.
+    shell: "lspv -u | grep -i {{item}} | awk '{ print $2}'"
+    register: pvid1
+    with_items: "{{ wwn_numbers }}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - set_fact:
+     combined_results: "{{ pvid1.results | json_query('[].stdout') }}"
+    when:
+      - pvid1 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Display message Convert list to string
+    set_fact:
+       check_final_pvids1: "{{ combined_results | join(',') }}"
+    when:
+      - pvid1 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - set_fact:
+       final_pvids1: "{{ check_final_pvids1 | regex_replace('([^,]+)', '(\\g<1>)') | regex_replace(',',' ') }}"
+    when:
+      - pvid1 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Display message Collected the PVID from the Disk WWN number from Site1.
+    debug:
+      msg: "Successfully Collected the PVID from the Disk WWN number {{final_pvids1}}."
+    when:
+      - pvid1 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Error message Collect the PVID from the Disk WWN number from Site1.
+    fail:
+      msg: "Fail to collect the PVID from the Disk WWN number."
+    any_errors_fatal: true
+    when:
+      - pvid1 is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  #####################################################################################
+
+
+  ######################Collecting PVID from WWN number of the disk from SITE2##################
+
+  - set_fact:
+      wwn_numbers2: "{{ item.Site2_Disk.split(',')|list}}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Find ansible_ssh_private_key_file path from /hosts file.
+    shell: grep 'ansible_ssh_private_key_file' /hosts |awk -F '=' '{print $2}'|tr -d \' |grep .
+    register: ssh_file_path
+    connection: local
+    ignore_errors: true
+    changed_when: false
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - set_fact:
+      PATH_OF_PEM_KEY: "{{ssh_file_path.stdout}}"
+    when:
+      - ssh_file_path is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Error Fail to get the ansible_ssh_private_key_file path from /hosts file.
+    fail:
+      msg: "Fail to get the ansible_ssh_private_key_file path from /hosts file. Please provide the exact ansible_ssh_private_key_file path in hosts file"
+    when:
+      - ssh_file_path is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    any_errors_fatal: yes
+    tags:
+      - create
+
+  - name: Collect the PVID from WWN number from Site2.
+  #  shell: "ssh root@{{NODE_DETAILS[-1].ip}} lspv -u | grep -i {{item}} | awk '{ print $2}'"
+    shell: "ssh -i {{PATH_OF_PEM_KEY}} root@{{NODE_DETAILS[-1].ip}} lspv -u | grep -i {{item}} | awk '{ print $2}'"
+    register: pvid2
+    with_items: "{{ wwn_numbers2 }}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - ssh_file_path is succeeded
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - set_fact:
+     combined_results2: "{{ pvid2.results | json_query('[].stdout') }}"
+    when:
+      - pvid2 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Display message Convert list to string
+    set_fact:
+       check_final_pvids2: "{{ combined_results2 | join(',') }}"
+    when:
+      - pvid2 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - set_fact:
+       final_pvids2: "{{ check_final_pvids2 | regex_replace('([^,]+)', '(\\g<1>)') | regex_replace(',',' ') }}"
+    when:
+      - pvid2 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Display message Collected the PVID from the Disk WWN number from Site2.
+    debug:
+      msg: "Successfully Collected the PVID from the Disk WWN number {{final_pvids2}} ."
+    when:
+      - pvid2 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  - name: Error message Collect the PVID from the Disk WWN number from Site2.
+    fail:
+      msg: "Fail to collect the PVID from the Disk WWN number."
+    any_errors_fatal: true
+    when:
+      - pvid2 is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+
+  #####################################################################################
+
+  ######################Collecting DiskID from PVID of the disk from SITE1##################
+
+  - set_fact:
+       final_pvids1: "{{ item.Site1_Disk | regex_replace('([^,]+)', '(\\g<1>)') | regex_replace(',',' ') }}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - set_fact:
+      pvid_numbers: "{{ item.Site1_Disk.split(',')|list}}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Collect the PVID from WWN number from Site1.
+    shell: "lspv -u | grep -i {{item}} | awk '{ print $1}'"
+    register: pvid1
+    with_items: "{{ pvid_numbers }}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - set_fact:
+     site1_hdisks: "{{ pvid1.results | json_query('[].stdout') }}"
+    when:
+      - pvid1 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Display message Collected the DISKID from the PVID number from Site1.
+    debug:
+      msg: "Collected the DISKID's {{site1_hdisks}} from the PVID number."
+    when:
+      - pvid1 is succeeded
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Error message Collect the DISKID from the PVID number from Site1.
+    fail:
+      msg: "Fail to collect the DiskID's from the PVID number."
+    any_errors_fatal: true
+    when:
+      - pvid1 is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  #####################################################################################
+
+
+  ######################Collecting DISK ID's by using PVID number of the disk from SITE2##################
+
+  - set_fact:
+       final_pvids2: "{{ item.Site2_Disk | regex_replace('([^,]+)', '(\\g<1>)') | regex_replace(',',' ') }}"
+    when:
+      - check_vg is failed
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - set_fact:
+      wwn_numbers2: "{{ item.Site2_Disk.split(',')|list}}"
+    when:
+      - check_vg is failed
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Collect the DISK ID's by using PVID number from Site2.
+    shell: "lspv -u | grep -i {{item}} | awk '{ print $1}'"
+    register: pvid2
+    with_items: "{{ wwn_numbers2 }}"
+    when:
+      - check_vg is failed
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - set_fact:
+     site2_hdisks: "{{ pvid2.results | json_query('[].stdout') }}"
+    when:
+      - pvid2 is succeeded
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Display message Collected the DISKID from the PVID number from Site2.
+    debug:
+      msg: "Collected the DISKID's {{site2_hdisks}} from the PVID number."
+    when:
+      - pvid2 is succeeded
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Error message Collect the DISKID from the PVID number from Site2.
+    fail:
+      msg: "Fail to collect the DiskID's from the PVID number."
+    any_errors_fatal: true
+    when:
+      - pvid2 is failed
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  ###################### Will clear if any backend config still present with on same disk ####################
+
+  - name: Check Disks are empty or not on site1.
+    shell: "/usr/sbin/readvgda {{item}} "
+    register: site1_disk_free
+    when:
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    with_items: "{{ site1_hdisks }}"
+    changed_when: false
+    ignore_errors: true
+    tags:
+      - create
+
+  - name: Error Site1 Disks are not free.
+    fail:
+      msg: "This site1 {{ site1_hdisks }} disks are not free. Please remove entry of {{ item }} from /external_var.yml and provide free disk"
+    any_errors_fatal: true
+    when:
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+      - site1_disk_free is succeeded
+    tags:
+      - create
+
+  - name: Check Disks are empty or not on site2.
+    shell: "/usr/sbin/readvgda {{item}} "
+    register: site2_disk_free
+    when:
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    with_items: "{{ site2_hdisks }}"
+    changed_when: false
+    ignore_errors: true
+    tags:
+      - create
+
+  - name: Error Site2 Disks are not free.
+    fail:
+      msg: "This site1 {{ site2_hdisks }} disks are not free. Please remove entry of {{ item }} from /external_var.yml and provide free disk"
+    any_errors_fatal: true
+    when:
+      - is_site2_node
+      - site2_disk_free is succeeded
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Get lsrpvclient on site1.
+    shell: "/usr/sbin/lsrpvclient | grep -w {{ item }} "
+    ignore_errors: true
+    register: lsrpvclient_site1
+    when:
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    with_items: "{{ site1_hdisks }}"
+    changed_when: false
+    tags:
+      - create
+
+  - name: Clear lsrpvclient on site1.
+    shell: "/usr/sbin/rmdev -Rdl {{ item }} -d "
+    when:
+      - is_site1_node
+      - lsrpvclient_site1 is succeeded
+      - Using_for_Cloud_catalog is not defined
+    with_items: "{{ site1_hdisks }}"
+    ignore_errors: true
+    tags:
+      - create
+
+  - name: Get lsrpvclient on site2.
+    shell: "/usr/sbin/lsrpvclient | grep -w {{ item }} "
+    when:
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    ignore_errors: true
+    register: lsrpvclient_site2
+    with_items: "{{ site2_hdisks }}"
+    changed_when: false
+    tags:
+      - create
+
+  - name: Clear lsrpvclient site2.
+    shell: "/usr/sbin/rmdev -Rdl {{ item }} -d "
+    when:
+      - is_site2_node
+      - lsrpvclient_site2 is succeeded
+      - Using_for_Cloud_catalog is not defined
+    with_items: "{{ site2_hdisks }}"
+    ignore_errors: true
+    tags:
+      - create
+
+  - name: Get lsrpvserver on site1.
+    shell: "/usr/sbin/lsrpvserver | grep -w {{ item }} | awk '{print $1}' "
+    when:
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    ignore_errors: true
+    register: lsrpvserver_site1
+    changed_when: false
+    with_items: "{{ site1_hdisks }}"
+    tags:
+      - create
+
+  - set_fact:
+     site1_servers: "{{ lsrpvserver_site1.results | json_query('[].stdout') }}"
+    when:
+      - lsrpvserver_site1
+      - is_site1_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Clear lsrpvserver on site1.
+    shell: "/usr/sbin/rmdev -Rdl {{item}} -d "
+    when:
+      - is_site1_node
+      - lsrpvserver_site1 is succeeded
+      - Using_for_Cloud_catalog is not defined
+    ignore_errors: true
+    with_items: "{{ site1_servers }}"
+    tags:
+      - create
+
+  - name: Get lsrpvserver site2.
+    shell: "/usr/sbin/lsrpvserver | grep -w {{ item }} | awk '{print $1}' "
+    when:
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    ignore_errors: true
+    register: lsrpvserver_site2
+    with_items: "{{ site2_hdisks }}"
+    changed_when: false
+    tags:
+      - create
+
+  - set_fact:
+     site2_servers: "{{ lsrpvserver_site2.results | json_query('[].stdout') }}"
+    when:
+      - lsrpvserver_site2
+      - is_site2_node
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+
+  - name: Clear lsrpvserver on site2.
+    shell: "/usr/sbin/rmdev -Rdl {{item}} -d "
+    when:
+      - is_site2_node
+      - lsrpvserver_site2 is succeeded
+      - Using_for_Cloud_catalog is not defined
+    ignore_errors: true
+    with_items: "{{ site2_servers }}"
+    tags:
+      - create
+
+  - name: Sync the lsrpvclient disks.
+    shell: "/usr/sbin/cfgmgr"
+    ignore_errors: true
+    tags:
+      - create
+
+  ###################### End of Backend cleanup ####################
+
+  - name: Create the ASYNC GLVM Configuration by using config wizard option.
+    shell: "/usr/es/sbin/cluster/glvm/utils/cl_glvm_configuration  -v '{{item.GLVM_name}}' -l '({{final_pvids1}})' -r '({{final_pvids2}})' -s '{{item.cache_size}}' -u '{{item.unit_of_cache}}'"
+    any_errors_fatal: true
+    register: async_glvm_create
+    when:
+      - is_site1_node
+      - item.type == "async"
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+      - async
+
+  - name: Create the ASYNC GLVM Configuration by using config wizard option.
+    shell: "/usr/es/sbin/cluster/glvm/utils/cl_glvm_configuration  -v '{{item.GLVM_name}}' -l '({{final_pvids1}})' -r '({{final_pvids2}})' -s '{{item.cache_size}}' -u '{{item.unit_of_cache}}'"
+    any_errors_fatal: true
+    register: async_glvm_create
+    when:
+      - is_site1_node
+      - item.type == "async"
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+      - async
+
+  - name: Async GLVM creation failed.  - Error Message
+    fail:
+      msg: "GLVM creation faileddue to {{ async_glvm_create.stderr }}"
+    any_errors_fatal: true
+    when: is_site1_node and async_glvm_create is failed and item.type == "async"
+    tags:
+      - create
+      - async
+
+  - name: Display message Async GLVM creation passed.
+    debug:
+      msg: "VG {{item.GLVM_name}} creation Successful."
+    when: is_site1_node and async_glvm_create is succeeded and item.type == "async"
+    tags:
+      - create
+      - async
+
+  - name: Create the SYNC GLVM Configuration by using config wizard option.
+    shell: "/usr/es/sbin/cluster/glvm/utils/cl_glvm_configuration  -v '{{item.GLVM_name}}' -l '({{final_pvids1}})' -r '({{final_pvids2}})' "
+    any_errors_fatal: true
+    register: sync_glvm_create
+#    until: "sync_glvm_create is succeeded"
+#    retries: 5
+#    delay: 600
+    when:
+      - is_site1_node
+      - item.type == "sync"
+      - Using_for_Cloud_catalog is defined
+      - Using_for_Cloud_catalog == True
+    tags:
+      - create
+      - sync
+
+  - name: Create the SYNC GLVM Configuration by using config wizard option.
+    shell: "/usr/es/sbin/cluster/glvm/utils/cl_glvm_configuration  -v '{{item.GLVM_name}}' -l '({{final_pvids1}})' -r '({{final_pvids2}})' "
+    any_errors_fatal: true
+    register: sync_glvm_create
+    when:
+      - is_site1_node
+      - item.type == "sync"
+      - Using_for_Cloud_catalog is not defined
+    tags:
+      - create
+      - sync
+
+  - name: sync GLVM creation failed.  - Error Message
+    fail:
+      msg: "GLVM creation failed due to {{ sync_glvm_create.stderr }}"
+    any_errors_fatal: true
+    when: 
+      - is_site1_node 
+      - sync_glvm_create is failed 
+      - item.type == "sync"
+    tags:
+      - create
+      - sync
+
+  - name: Display message sync GLVM creation passed.
+    debug:
+      msg: "VG {{item.GLVM_name}} creation Successful."
+    when: 
+      - is_site1_node 
+      - sync_glvm_create is succeeded 
+      - item.type == "sync"
+    tags:
+      - create
+      - sync
+
+  # Verify and Sync (Create)
+  - name: Verify and Sync (Create)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_create
+    ignore_errors: true
+    when: is_site1_node
+    tags:
+      - create
+
+  - name: cluster sync failed.
+    fail:
+      msg: "{{ cluster_sync_create.stderr }}"
+    any_errors_fatal: true
+    when: cluster_sync_create is failed and is_site1_node
+    tags:
+      - create
+
+  - name: Cluster sync passed.
+    debug:
+      msg: "Cluster synced successfully post GLVM creation."
+    when: cluster_sync_create is succeeded and is_site1_node
+    tags:
+      - create
+
+  when: check_vg is failed
+  tags:
+    - create

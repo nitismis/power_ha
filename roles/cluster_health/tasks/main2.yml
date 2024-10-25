@@ -1,0 +1,31 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+---
+- name: Check ResourceGroup {{item}} Current State
+  shell: "/usr/es/sbin/cluster/utilities/clRGinfo -m {{item}} |grep -w ONLINE"  
+  register: RG_State
+  ignore_errors: true
+  changed_when: false
+  tags: always
+ 
+- name: Display message If the ResourceGroup {{item}} State is ONLINE.
+  when: RG_State is succeeded and is_current_node
+  debug:
+    msg: "ResourceGroup {{item}} is online"
+  tags: always
+
+- name:  ResourceGroup {{item}} is not online -- Error
+  fail:
+    msg: "ResourceGroup {{item}} is not online"
+  when: RG_State is failed and is_current_node
+  tags: always
+
+
+

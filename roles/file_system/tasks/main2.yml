@@ -1,0 +1,127 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for volume_groups
+- name: Check if Volume Group Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volume_group {{item.VOLUME_GROUP}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_vg
+  changed_when: false
+  tags: 
+    - create
+
+# tasks file for file_system
+- name: Check if FS already exists 
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query file_system /{{item.NAME}}"
+  when: is_current_node
+  ignore_errors: true
+  register: check_fs
+  changed_when: false
+  tags:
+    - create
+    - delete
+
+- name: Display message if VG doesn't exist
+  debug:
+    msg: "VG {{item.VOLUME_GROUP}} doesn't exist. Hence skipping the create FS {{item.NAME}}"
+  when: 
+    - is_current_node 
+    - check_vg is failed
+  tags:
+    - create
+
+- name: Debug message if FS exists
+  debug:
+    msg: "FS {{item.NAME}} already exists. Hence skipping the create FS {{item.NAME}}."
+  when: 
+    - is_current_node
+    - check_fs is succeeded
+  tags:
+    - create
+
+- block:
+
+  # Display messages for VG existence
+  - name: Display message if VG exists
+    debug:
+      msg: "VG {{item.VOLUME_GROUP}} already exists."
+
+  - name: Display message if FS doesn't exist
+    debug:
+      msg: "As Expected FS {{item.NAME}} doesn't exist."
+
+  - name: Create File System (Enhanced or Standard/Compressed/Large)
+    shell: >-
+      /usr/es/sbin/cluster/utilities/clmgr add file_system /{{ item.NAME }}
+      TYPE={{ item.TYPE }}
+      VOLUME_GROUP={{ item.VOLUME_GROUP }}
+      UNITS={{ item.UNITS }}
+      SIZE_PER_UNIT={{ item.SIZE_PER_UNIT }}
+      {% if item.TYPE == "enhanced" %}
+      BLOCK_SIZE={{ item.BLOCK_SIZE }}
+      {% endif %}
+    when: is_current_node and item.TYPE in ["enhanced", "standard", "compressed", "large"]
+    register: fs_create
+    ignore_errors: true
+
+  - name: Display Message for FS Creation (Pass)
+    debug:
+      msg: "FS {{ item.NAME }} created successfully."
+    when: fs_create is succeeded
+
+  # Debug message for Fail (Error)
+  - name: Debug Message for FS Creation (Fail)
+    fail:
+      msg: "{{ fs_create.stderr }}"
+    when: is_current_node and fs_create is failed
+    any_errors_fatal: true
+
+  when: 
+    - is_current_node 
+    - check_vg is succeeded
+    - check_fs is failed
+  tags:
+    - create
+
+- name: Debug message if FS doesn't exist
+  debug:
+    msg: "FS {{item.NAME}} doesn't exist. Hence skipping the FS {{item.NAME}} deletion."
+  when: (check_fs is failed) and is_current_node
+  tags:
+    - delete
+
+- block:
+  # Display messages for FS existence
+  - name: Display message if FS exists
+    debug:
+      msg: "As Expected FS {{item.NAME}} is exists."
+
+  - name: Delete any type of File System
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete file_system /{{item.NAME}}"
+    register: fs_delete
+
+  # Debug message for Pass (Success)
+  - name: Debug Message for FS Deletion (Pass)
+    debug:
+      msg: "FS {{ item.NAME }} deleted successfully."
+    when: fs_delete is succeeded
+
+  # Debug message for Fail (Error)
+  - name: Debug Message for FS Deletion (Fail)
+    fail:
+      msg: "{{ fs_delete.stderr | map(attribute='stderr') | list | join('\n') }}"
+    any_errors_fatal: true
+    when: fs_delete is failed
+
+  when: 
+    - is_current_node 
+    - check_fs is succeeded
+  tags:
+    - delete

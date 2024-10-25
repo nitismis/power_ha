@@ -1,0 +1,209 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+- name: Check if Volume Group already Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query volume_group {{item.GLVM_name}} |grep -w TYPE"
+  ignore_errors: true
+  register: check_vg
+  until: "'gmvg' in check_vg.stdout"
+  retries: 5
+  delay: 10
+  changed_when: false
+  tags:
+    - delete
+
+- name: Error message if VG doesn't exist.
+  debug:
+    msg: " VG doesn't exist on {{ansible_hostname}} node. Hence skipping the {{item.GLVM_name}} deletion."
+  when: "not check_vg.stdout | regex_search('gmvg') and (check_vg is failed or check_vg is succeeded)"
+  tags:
+    - delete
+
+- name: Check if Resource Group already Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query resource_group {{item.GLVM_name}}_RG "
+  ignore_errors: true
+  register: check_rg
+  changed_when: false
+  when: is_site1_node
+  tags:
+    - delete
+
+- name: Error message if RG doesn't exist.
+  debug:
+    msg: "RG doesn't exist. Hence skipping the {{item.GLVM_name}} deletion."
+  when: is_site1_node and check_rg is failed
+  tags:
+    - delete
+
+- name: Check if File System already Exists
+  shell: "/usr/es/sbin/cluster/utilities/clmgr query file_system /{{item.GLVM_name}}fs0 "
+  ignore_errors: true
+  register: check_fs
+  changed_when: false
+  when: is_site1_node
+  tags:
+    - delete
+
+- name: Error message if FS doesn't exist.
+  debug:
+    msg: "FS doesn't exist. Hence skipping the {{item.GLVM_name}} deletion."
+  when: is_site1_node and check_fs is failed
+  tags:
+    - delete
+
+- block:
+
+  - name: Display message if VG exists
+    debug:
+      msg: "As expected VG {{item.GLVM_name}} already exists on {{ansible_hostname}} node."
+    when: check_vg.stdout | regex_search('gmvg') and check_vg is succeeded
+    tags:
+      - delete
+
+  - name: Display message if RG exists
+    debug:
+      msg: "As expected RG {{item.GLVM_name}}_RG is available."
+    when: is_site1_node and check_rg is succeeded
+    tags:
+      - delete
+
+  - name: Display message if FS exists
+    debug:
+      msg: "As expected FS /{{item.GLVM_name}}fs0 is available."
+    when: is_site1_node and check_fs is succeeded
+    tags:
+      - delete
+
+  - name: Delete the GLVM Configuration.
+    shell: "/usr/es/sbin/cluster/glvm/utils/cl_glvm_configuration  -d '{{item.GLVM_name}}'"
+    ignore_errors: true
+    register: delete_glvm
+    changed_when: false
+    when: is_site1_node
+    tags:
+      - delete
+
+  - name: Display message Successfully deleted the GLVM.
+    debug:
+      msg: "Successfully deleted the {{item.GLVM_name}} GLVM configuration."
+    when: is_site1_node and delete_glvm is succeeded
+    tags:
+      - delete
+
+  - name: Error message Failed to delete the GLVM configuration.
+    fail:
+      msg: "Failed to delete the GLVM {{item.GLVM_name}} configuration"
+    any_errors_fatal: true
+    when: is_site1_node and delete_glvm is failed
+    tags:
+      - delete
+
+  - name: Delete the FS /{{item.GLVM_name}}fs0.
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete fs /{{item.GLVM_name}}fs0 "
+    ignore_errors: true
+    register: delete_fs
+    changed_when: false
+    when: is_site1_node
+    tags:
+      - delete
+
+  - name: Display message Successfully deleted the FS.
+    debug:
+      msg: "Successfully deleted the /{{item.GLVM_name}}fs0 FS."
+    when: is_site1_node and delete_fs is succeeded
+    tags:
+      - delete
+
+  - name: Error message Failed to delete the FS .
+    fail:
+      msg: "Failed to delete the FS /{{item.GLVM_name}}fs0 ."
+    any_errors_fatal: true
+    when: is_site1_node and delete_fs is failed
+    tags:
+      - delete
+
+
+  - name: Delete the VG {{item.GLVM_name}} .
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete vg {{item.GLVM_name}} "
+    ignore_errors: true
+    register: delete_vg
+    changed_when: false
+    when: is_site1_node
+    tags:
+      - delete
+
+  - name: Display message Successfully deleted the VG.
+    debug:
+      msg: "Successfully deleted the VG {{item.GLVM_name}}."
+    when: is_site1_node and delete_vg is succeeded
+    tags:
+      - delete
+
+  - name: Error message Failed to delete the VG .
+    fail:
+      msg: "Failed to delete the VG {{item.GLVM_name}} ."
+    any_errors_fatal: true
+    when: is_site1_node and delete_vg is failed
+    tags:
+      - delete
+
+  - name: Delete the RG {{item.GLVM_name}}_RG .
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete rg {{item.GLVM_name}}_RG "
+    ignore_errors: true
+    register: delete_rg
+    changed_when: false
+    when: is_site1_node
+    tags:
+      - delete
+
+  - name: Display message Successfully deleted the RG.
+    debug:
+      msg: "Successfully deleted the RG {{item.GLVM_name}}_RG."
+    when: is_site1_node and delete_rg is succeeded
+    tags:
+      - delete
+
+  - name: Error message Failed to delete the RG .
+    fail:
+      msg: "Failed to delete the RG {{item.GLVM_name}}_RG ."
+    any_errors_fatal: true
+    when: is_site1_node and delete_rg is failed
+    tags:
+      - delete
+
+  - name: Verify and Sync (Delete)
+    shell: /usr/es/sbin/cluster/utilities/cldare -rt -C yes
+    async: 3600     # Maximum allowed time in Seconds
+    poll: 15        # Polling Interval in Seconds
+    register: cluster_sync_delete
+    ignore_errors: true
+    when: is_site1_node and delete_glvm is succeeded
+    tags:
+      - delete
+
+  - name: cluster sync failed.
+    fail:
+      msg: "{{ cluster_sync_delete.stderr }}"
+    any_errors_fatal: true
+    when: is_site1_node and cluster_sync_delete is failed
+    tags:
+      - delete
+
+  - name: Cluster sync passed.
+    debug:
+      msg: "Cluster synced successfully post GLVM deletion."
+    when: cluster_sync_delete is succeeded and is_site1_node
+    tags:
+      - delete
+  when:
+    - check_vg.stdout | regex_search('gmvg') and check_vg is succeeded
+    - check_rg is succeeded
+    - check_fs is succeeded
+  tags:
+    - delete

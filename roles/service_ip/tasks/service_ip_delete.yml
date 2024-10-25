@@ -1,0 +1,81 @@
+############################################
+#  Capgemini_PROLOG_BEGIN_TAG
+#  This is an automatically generated prolog.
+#
+#  Copyright (C) Capgemini Engineering ACT S.A.S. 2016-2023. All rights reserved.
+#
+#  Capgemini_PROLOG_END_TAG
+###########################################
+
+# tasks file for service_ip
+- name: Check if ServiceIP exists 
+  shell: "CLMGR_TIMEOUT=120 /usr/es/sbin/cluster/utilities/clmgr query service_ip {{item.NAME}}"
+  register: check_service_ip
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - delete
+
+- name: Service ip is not exists. 
+  debug:
+    msg: "ServiceIP {{ item.NAME }} does not exist on the nodes. Hence skipping the ServiceIP {{ item.NAME }} deletion"
+  when:
+    - check_service_ip is failed
+    - is_current_node
+  tags:
+    - delete
+
+- block:
+  - name: As expected ServiceIP already Exists.
+    debug:
+      msg: "As expected ServiceIP {{ item.NAME }} already exists."
+    when: 
+      - is_current_node
+
+  - name: Delete Service IP
+    shell: "/usr/es/sbin/cluster/utilities/clmgr delete service_ip {{item.NAME}}"
+    register: sip_delete
+    any_errors_fatal: true
+    when: check_service_ip is succeeded and is_current_node
+
+  # Debug message for Pass (Success)
+  - name: Debug Message for service IP deletion (Pass)
+    debug:
+      msg: "Service IP {{ item.NAME }} deleted successfully."
+    when: 
+      - sip_delete is succeeded
+      - is_current_node
+
+  # Debug message for Fail (Error)
+  - name: Debug Message for Service IP deletion (Fail)
+    fail:
+      msg: "{{ sip_delete.stderr | map(attribute='stderr') | list | join('\n') }}"
+    when:
+      - sip_delete is failed
+      - is_current_node
+
+  - name: Remove service IP mappings to /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      regexp: "{{ item.IP }} {{ item.NAME }}"
+      state: absent
+    when: check_service_ip is succeeded
+    register: remove_service_ip
+
+  # Debug message for "pass" case
+  - name: Debug - Remove ServiceIP mappings succeeded
+    debug:
+      msg: "ServiceIP mappings removed successfully from /etc/hosts"
+    when: remove_service_ip is succeeded
+
+  # Debug message for "fail" case
+  - name: Debug - Remove ServiceIP mappings failed
+    fail:
+      msg: "Failed to remove ServiceIP mappings to /etc/hosts"
+    when: remove_service_ip is failed
+
+  when: 
+    - check_service_ip is succeeded
+  tags:
+    - delete
+
